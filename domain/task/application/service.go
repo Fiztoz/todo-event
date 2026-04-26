@@ -39,6 +39,7 @@ func (s *Service) CreateTask(ctx context.Context, title string) mo.Result[domain
 	task := domain.Task{
 		ID:        bson.NewObjectID(),
 		Title:     title,
+		Status:    domain.StatusPending,
 		CreatedAt: time.Now(),
 	}
 	s.publisher.Publish(domain.EventCreated, domain.CreatedPayload{Task: task})
