@@ -1,0 +1,23 @@
+# Build output
+/todoe
+/cmd/api/api
+
+# Go toolchain artifacts
+*.test
+*.out
+/vendor/
+
+# Environment / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
