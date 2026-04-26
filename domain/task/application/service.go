@@ -12,7 +12,10 @@ import (
 	"todoe/domain/task/port"
 )
 
-var ErrInvalidTitle = errors.New("title must not be empty")
+var (
+	ErrInvalidTitle  = errors.New("title must not be empty")
+	ErrInvalidStatus = errors.New("invalid status")
+)
 
 type Service struct {
 	repo      port.Repository
@@ -32,6 +35,14 @@ func validateTitle(title string) error {
 	return nil
 }
 
+func validateStatus(s domain.Status) error {
+	switch s {
+	case domain.StatusPending, domain.StatusInProgress, domain.StatusDone:
+		return nil
+	}
+	return ErrInvalidStatus
+}
+
 func (s *Service) CreateTask(ctx context.Context, title string) mo.Result[domain.Task] {
 	if err := validateTitle(title); err != nil {
 		return mo.Err[domain.Task](err)
@@ -48,4 +59,24 @@ func (s *Service) CreateTask(ctx context.Context, title string) mo.Result[domain
 
 func (s *Service) ListTasks(ctx context.Context) mo.Result[[]domain.Task] {
 	return s.repo.FindAll(ctx)
+}
+
+func (s *Service) ChangeStatus(ctx context.Context, id bson.ObjectID, status domain.Status) mo.Result[domain.Task] {
+	if err := validateStatus(status); err != nil {
+		return mo.Err[domain.Task](err)
+	}
+	current := s.repo.FindByID(ctx, id)
+	if current.IsError() {
+		return mo.Err[domain.Task](current.Error())
+	}
+	prev := current.MustGet()
+	task := domain.Task{
+		ID:        bson.NewObjectID(),
+		OriginID:  &prev.ID,
+		Title:     prev.Title,
+		Status:    status,
+		CreatedAt: time.Now(),
+	}
+	s.publisher.Publish(domain.EventStatusChanged, domain.StatusChangedPayload{Task: task})
+	return mo.Ok(task)
 }

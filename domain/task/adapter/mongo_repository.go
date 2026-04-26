@@ -50,12 +50,25 @@ func (r *MongoRepository) Save(ctx context.Context, task domain.Task) mo.Result[
 	return mo.Ok(struct{}{})
 }
 
+// FindAll returns only the current state of each task (leaf records — not referenced as origin_id).
 func (r *MongoRepository) FindAll(ctx context.Context) mo.Result[[]domain.Task] {
 	col, err := r.collection()
 	if err != nil {
 		return mo.Err[[]domain.Task](err)
 	}
-	cursor, err := col.Find(ctx, bson.D{})
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: "tasks"},
+			{Key: "localField", Value: "_id"},
+			{Key: "foreignField", Value: "origin_id"},
+			{Key: "as", Value: "children"},
+		}}},
+		bson.D{{Key: "$match", Value: bson.D{
+			{Key: "children", Value: bson.D{{Key: "$size", Value: 0}}},
+		}}},
+		bson.D{{Key: "$project", Value: bson.D{{Key: "children", Value: 0}}}},
+	}
+	cursor, err := col.Aggregate(ctx, pipeline)
 	if err != nil {
 		return mo.Err[[]domain.Task](err)
 	}
@@ -65,4 +78,16 @@ func (r *MongoRepository) FindAll(ctx context.Context) mo.Result[[]domain.Task] 
 		return mo.Err[[]domain.Task](err)
 	}
 	return mo.Ok(tasks)
+}
+
+func (r *MongoRepository) FindByID(ctx context.Context, id bson.ObjectID) mo.Result[domain.Task] {
+	col, err := r.collection()
+	if err != nil {
+		return mo.Err[domain.Task](err)
+	}
+	var task domain.Task
+	if err := col.FindOne(ctx, bson.D{{Key: "_id", Value: id}}).Decode(&task); err != nil {
+		return mo.Err[domain.Task](err)
+	}
+	return mo.Ok(task)
 }
