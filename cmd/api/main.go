@@ -13,7 +13,6 @@ import (
 	healthadapter "todoe/internal/health/adapter"
 	healthhttp "todoe/internal/health/adapter/http"
 	"todoe/internal/health/application"
-	pkgio "todoe/pkg/io"
 )
 
 func main() {
@@ -22,23 +21,13 @@ func main() {
 		mongoURI = "mongodb://root:root@localhost:27017"
 	}
 
-	clientIO := pkgio.Lazy(func() mo.Result[*mongo.Client] {
-		client, err := mongo.Connect(options.Client().ApplyURI(mongoURI))
-		if err != nil {
-			return mo.Err[*mongo.Client](err)
-		}
-		return mo.Ok(client)
+	clientIO := mo.NewIOEither(func() (*mongo.Client, error) {
+		return mongo.Connect(options.Client().ApplyURI(mongoURI))
 	})
 
-	defer func() {
-		if clientIO.IsInitialized() {
-			if r := clientIO.Run(); r.IsOk() {
-				_ = r.MustGet().Disconnect(context.Background())
-			}
-		}
-	}()
+	healthRepo := healthadapter.NewMongoRepository(clientIO)
+	defer healthRepo.Disconnect(context.Background())
 
-	healthRepo := healthadapter.NewMongoRepository(&clientIO)
 	healthService := application.NewService(healthRepo)
 	healthHandler := healthhttp.NewHandler(healthService)
 
