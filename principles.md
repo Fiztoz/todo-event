@@ -16,13 +16,20 @@
 
 ## Folder Structure
 ```
-internal/<domain>/
+domain/<name>/
 ├── domain/          — Domain models and constants
 ├── port/            — PortIn (UseCase) and PortOut (Repository) interfaces
 ├── adapter/
 │   ├── *.go         — Infrastructure adapters (e.g. mongo_repository.go)
 │   └── http/        — Transport adapter (HTTP handlers), package httpadapter
 └── application/     — Service (Orchestration + Pure Logic)
+
+pkg/                 — Shared infrastructure utilities (not domain services)
+├── event/           — Synchronous in-process event bus
+└── ...
+
+cmd/api/             — Binary entry point; wires all domains and adapters
+internal/            — Reserved for infrastructure that must not be imported externally
 ```
 
 ## Design Decisions
@@ -42,10 +49,12 @@ internal/<domain>/
 - Side Effect function must not return multiple value like (value, err) it must be wrapped with Result, Option or Either.
 
 ## Back End
-- Modular Monolith — each domain lives under `internal/<domain>/`
+- Modular Monolith — each domain lives under `domain/<name>/`
 - NO shared services between domains
 - Self Contain API, Repository and Model within domain
-- `samber/mo` for Result/Option types
+- `samber/mo` for Result/Option/Either types
+- `mo.IOEither[R]` wraps `func() (R, error)` for fallible side-effect computations (e.g. MongoDB client); `Run()` returns `Either[error, R]`
+- Lazy singleton pattern: wrap `mo.IOEither` with `sync.Once` so the computation runs at most once (connect on first use, not at startup)
 
 ## Repository
 - Responsible only in it own collection
@@ -65,11 +74,11 @@ Side effects happen in event handlers — separate, subscribable, ignorant of ea
 ```
 Service.DoThing()
   ├── validate input
-  ├── build domain entity  (pre-generate ID with primitive.NewObjectID())
+  ├── build domain entity  (pre-generate ID with bson.NewObjectID())
   ├── publisher.Publish(event)   ← only crossing the boundary
   └── return entity              ← caller gets the result immediately
 
-EventBus
+EventBus (pkg/event.Bus)
   ├── SaveHandler          → repo.Create(entity)
   ├── NotificationHandler  → downstream side effect
   └── LogHandler           → wildcard, logs every event
@@ -81,11 +90,26 @@ Adding a new side effect = write a new handler and call `bus.Subscribe`. The ser
 
 **Testing:** Service tests only assert the event was published — no repo mock needed. Handler tests only assert `repo.Create` was called correctly.
 
+**Wiring (cmd/api/main.go):**
+```go
+bus := event.NewBus()
+repo := adapter.NewMongoRepository(clientIO)
+bus.Subscribe(domain.EventCreated, adapter.NewSaveHandler(repo))
+service := application.NewService(repo, bus)
+```
+
 | Event | Subscribers |
 |---|---|
+| `task.created` | `SaveHandler`, `LogHandler` |
 | `order.placed` | `OrderSaveHandler`, `NotificationEventHandler`, `LogHandler` |
 | `notification.sent` | `NotificationSaveHandler`, `LogHandler` |
 | `customer.registered` | `NotificationEventHandler`, `LogHandler` |
+
+## MongoDB
+- Driver: `go.mongodb.org/mongo-driver/v2`
+- ObjectID type: `bson.ObjectID` (not `primitive.ObjectID` — `primitive` subpackage does not exist in v2)
+- Generate new ID: `bson.NewObjectID()`
+- Lazy client: `mo.NewIOEither(func() (*mongo.Client, error) { return mongo.Connect(...) })` wrapped with `sync.Once` in the repository
 
 ## Front End
 - Angular 19 standalone components, signals for state
