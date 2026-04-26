@@ -61,22 +61,21 @@ func (s *Service) ListTasks(ctx context.Context) mo.Result[[]domain.Task] {
 	return s.repo.FindAll(ctx)
 }
 
-func (s *Service) ChangeStatus(ctx context.Context, id bson.ObjectID, status domain.Status) mo.Result[domain.Task] {
+func (s *Service) GetTask(ctx context.Context, id bson.ObjectID) mo.Result[domain.Task] {
+	return s.repo.FindByID(ctx, id)
+}
+
+func (s *Service) ChangeStatus(ctx context.Context, task domain.Task, status domain.Status) mo.Result[domain.Task] {
 	if err := validateStatus(status); err != nil {
 		return mo.Err[domain.Task](err)
 	}
-	current := s.repo.FindByID(ctx, id)
-	if current.IsError() {
-		return mo.Err[domain.Task](current.Error())
-	}
-	prev := current.MustGet()
-	task := domain.Task{
+	next := domain.Task{
 		ID:        bson.NewObjectID(),
-		OriginID:  &prev.ID,
-		Title:     prev.Title,
+		OriginID:  &task.ID,
+		Title:     task.Title,
 		Status:    status,
 		CreatedAt: time.Now(),
 	}
-	s.publisher.Publish(domain.EventStatusChanged, domain.StatusChangedPayload{Task: task})
-	return mo.Ok(task)
+	s.publisher.Publish(domain.EventStatusChanged, domain.StatusChangedPayload{Task: next})
+	return mo.Ok(next)
 }

@@ -59,7 +59,11 @@ func (h *Handler) ChangeStatus(c *fiber.Ctx) error {
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	result := h.useCase.ChangeStatus(c.Context(), id, body.Status)
+	taskResult := h.useCase.GetTask(c.Context(), id)
+	if taskResult.IsError() {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "task not found"})
+	}
+	result := h.useCase.ChangeStatus(c.Context(), taskResult.MustGet(), body.Status)
 	if result.IsError() {
 		if errors.Is(result.Error(), application.ErrInvalidStatus) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": result.Error().Error()})

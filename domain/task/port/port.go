@@ -11,7 +11,8 @@ import (
 type UseCase interface {
 	CreateTask(ctx context.Context, title string) mo.Result[domain.Task]
 	ListTasks(ctx context.Context) mo.Result[[]domain.Task]
-	ChangeStatus(ctx context.Context, id bson.ObjectID, status domain.Status) mo.Result[domain.Task]
+	GetTask(ctx context.Context, id bson.ObjectID) mo.Result[domain.Task]
+	ChangeStatus(ctx context.Context, task domain.Task, status domain.Status) mo.Result[domain.Task]
 }
 
 type Repository interface {
