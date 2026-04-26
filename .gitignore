@@ -1,6 +1,10 @@
 # Build output
 /todoe
+/api
 /cmd/api/api
+
+# Claude
+.claude/
 
 # Go toolchain artifacts
 *.test
