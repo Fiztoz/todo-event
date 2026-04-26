@@ -12,7 +12,13 @@ import (
 
 	healthadapter "todoe/internal/health/adapter"
 	healthhttp "todoe/internal/health/adapter/http"
-	"todoe/internal/health/application"
+	healthapp "todoe/internal/health/application"
+
+	taskadapter "todoe/domain/task/adapter"
+	taskhttp "todoe/domain/task/adapter/http"
+	taskapplication "todoe/domain/task/application"
+	taskdomain "todoe/domain/task/domain"
+	"todoe/pkg/event"
 )
 
 func main() {
@@ -28,11 +34,19 @@ func main() {
 	healthRepo := healthadapter.NewMongoRepository(clientIO)
 	defer healthRepo.Disconnect(context.Background())
 
-	healthService := application.NewService(healthRepo)
+	healthService := healthapp.NewService(healthRepo)
 	healthHandler := healthhttp.NewHandler(healthService)
+
+	bus := event.NewBus()
+	taskRepo := taskadapter.NewMongoRepository(clientIO)
+	bus.Subscribe(taskdomain.EventCreated, taskadapter.NewSaveHandler(taskRepo))
+	taskService := taskapplication.NewService(taskRepo, bus)
+	taskHandler := taskhttp.NewHandler(taskService)
 
 	app := fiber.New()
 	app.Get("/health", healthHandler.CheckHealth)
+	app.Post("/tasks", taskHandler.Create)
+	app.Get("/tasks", taskHandler.List)
 
 	log.Fatal(app.Listen(":3000"))
 }
