@@ -1,0 +1,204 @@
+:root {
+  --blue:       #0052FF;
+  --blue-hover: #0040CC;
+  --green:      #05B169;
+  --orange:     #F7931A;
+  --red:        #E13C35;
+  --bg:         #F7F8FA;
+  --surface:    #FFFFFF;
+  --border:     #E8ECF0;
+  --text:       #050F19;
+  --text-muted: #5B616E;
+  --radius-sm:  6px;
+  --radius-md:  12px;
+  --shadow-sm:  0 1px 3px rgba(5,15,25,.06), 0 1px 2px rgba(5,15,25,.04);
+  --shadow-md:  0 4px 12px rgba(5,15,25,.08), 0 2px 4px rgba(5,15,25,.04);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Nav ─────────────────────────────────────────── */
+.nav {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  height: 60px;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.nav-logo {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--blue);
+  letter-spacing: -0.3px;
+}
+
+/* ── Page ─────────────────────────────────────────── */
+.page {
+  max-width: 640px;
+  margin: 40px auto;
+  padding: 0 20px;
+}
+
+.page-header {
+  margin-bottom: 28px;
+}
+.page-header h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+.page-header p {
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-size: 0.9rem;
+}
+
+/* ── Create form ─────────────────────────────────── */
+.create-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-sm);
+}
+.create-form {
+  display: flex;
+  gap: 10px;
+}
+.create-form input {
+  flex: 1;
+  height: 44px;
+  padding: 0 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--bg);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.create-form input::placeholder { color: var(--text-muted); }
+.create-form input:focus { border-color: var(--blue); background: #fff; }
+.btn-primary {
+  height: 44px;
+  padding: 0 20px;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.btn-primary:hover:not(:disabled) { background: var(--blue-hover); }
+.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Task list ───────────────────────────────────── */
+.section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.task-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+
+/* ── Task item ───────────────────────────────────── */
+.task-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s;
+}
+.task-item:hover { box-shadow: var(--shadow-md); }
+
+.task-body { flex: 1; min-width: 0; }
+.task-title {
+  font-weight: 500;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.task-item.done .task-title { text-decoration: line-through; color: var(--text-muted); }
+
+/* Status badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: 100px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+.badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.badge.pending     { background: #FFF3E0; color: #E65100; }
+.badge.in_progress { background: #E8F0FF; color: #0040CC; }
+.badge.done        { background: #E6F7EF; color: #038A52; }
+
+/* Action buttons */
+.task-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.btn-ghost {
+  height: 32px;
+  padding: 0 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+  text-transform: capitalize;
+}
+.btn-ghost:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); background: #E8F0FF; }
+.btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* States */
+.state-msg {
+  text-align: center;
+  padding: 48px 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.form-error {
+  color: var(--red);
+  font-size: 0.8rem;
+  margin-top: 8px;
+}
