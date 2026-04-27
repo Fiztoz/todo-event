@@ -2,7 +2,7 @@
   <div class="task-item" :class="task.status">
     <div class="task-body">
       <div class="task-title">{{ task.title }}</div>
-      <span class="badge" :class="task.status">{{ label }}</span>
+      <span class="badge" :class="task.status">{{ statusLabels[task.status] }}</span>
     </div>
     <div class="task-actions">
       <button
@@ -11,42 +11,41 @@
         class="btn-ghost"
         @click="change(s)"
         :disabled="loading"
-      >{{ actionLabel(s) }}</button>
+      >{{ actionLabels[s] }}</button>
     </div>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
-import { changeStatus } from '../api.js'
+import { changeStatus } from '../api.ts'
+import type { Status, Task } from '../types.ts'
 
-const props = defineProps({ task: Object })
-const emit = defineEmits(['updated'])
+const props = defineProps<{ task: Task }>()
+const emit = defineEmits<{ updated: [task: Task] }>()
 const loading = ref(false)
 
-const transitions = {
+const transitions: Record<Status, Status[]> = {
   pending:     ['in_progress'],
   in_progress: ['done', 'pending'],
   done:        [],
 }
 
-const statusLabels = {
+const statusLabels: Record<Status, string> = {
   pending:     'Pending',
   in_progress: 'In Progress',
   done:        'Done',
 }
 
-const actionLabels = {
+const actionLabels: Record<Status, string> = {
   pending:     'Reset',
   in_progress: 'Start',
   done:        'Complete',
 }
 
-const label = computed(() => statusLabels[props.task.status] ?? props.task.status)
-const nextStatuses = computed(() => transitions[props.task.status] ?? [])
-const actionLabel = s => actionLabels[s] ?? s
+const nextStatuses = computed(() => transitions[props.task.status])
 
-async function change(status) {
+async function change(status: Status): Promise<void> {
   loading.value = true
   try {
     const updated = await changeStatus(props.task.id, status)

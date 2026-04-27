@@ -1,18 +1,20 @@
+import type { Status, Task } from './types.ts'
+
 const BASE = '/api'
 
-export async function listTasks() {
+export async function listTasks(): Promise<Task[]> {
   const res = await fetch(`${BASE}/tasks`)
   if (!res.ok) throw new Error('failed to list tasks')
   return res.json()
 }
 
-export async function getTask(id) {
+export async function getTask(id: string): Promise<Task> {
   const res = await fetch(`${BASE}/tasks/${id}`)
   if (!res.ok) throw new Error('task not found')
   return res.json()
 }
 
-export async function createTask(title) {
+export async function createTask(title: string): Promise<Task> {
   const res = await fetch(`${BASE}/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -22,7 +24,7 @@ export async function createTask(title) {
   return res.json()
 }
 
-export async function changeStatus(id, status) {
+export async function changeStatus(id: string, status: Status): Promise<Task> {
   const res = await fetch(`${BASE}/tasks/${id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

@@ -15,16 +15,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
-import { createTask } from '../api.js'
+import { createTask } from '../api.ts'
+import type { Task } from '../types.ts'
 
-const emit = defineEmits(['created'])
+const emit = defineEmits<{ created: [task: Task] }>()
 const title = ref('')
 const loading = ref(false)
 const error = ref('')
 
-async function submit() {
+async function submit(): Promise<void> {
   error.value = ''
   loading.value = true
   try {
@@ -32,7 +33,7 @@ async function submit() {
     title.value = ''
     emit('created', task)
   } catch (e) {
-    error.value = e.message
+    error.value = (e as Error).message
   } finally {
     loading.value = false
   }

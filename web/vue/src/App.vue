@@ -25,33 +25,34 @@
   </main>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import CreateTask from './components/CreateTask.vue'
 import TaskItem from './components/TaskItem.vue'
-import { listTasks } from './api.js'
+import { listTasks } from './api.ts'
+import type { Task } from './types.ts'
 
-const tasks = ref([])
+const tasks = ref<Task[]>([])
 const loading = ref(false)
 const error = ref('')
 
-async function load() {
+async function load(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
     tasks.value = await listTasks()
   } catch (e) {
-    error.value = e.message
+    error.value = (e as Error).message
   } finally {
     loading.value = false
   }
 }
 
-function onCreated(task) {
+function onCreated(task: Task): void {
   tasks.value.unshift(task)
 }
 
-function onUpdated(updated) {
+function onUpdated(updated: Task): void {
   const i = tasks.value.findIndex(t => t.id === updated.id)
   if (i !== -1) tasks.value[i] = updated
 }
