@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/samber/mo"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -48,11 +47,9 @@ func (s *Service) CreateTask(ctx context.Context, title string) mo.Result[domain
 	if err := validateTitle(title); err != nil {
 		return mo.Err[domain.Task](err)
 	}
-	task := domain.Task{
-		ID:        bson.NewObjectID(),
-		Title:     title,
-		Status:    domain.StatusPending,
-		CreatedAt: time.Now(),
+	task := domain.NewTask(title)
+	if result := s.repo.Save(ctx, task); result.IsError() {
+		return mo.Err[domain.Task](result.Error())
 	}
 	s.publisher.Publish(ctx, event.Event{Type: domain.EventCreated, Payload: task})
 	return mo.Ok(task)
@@ -70,12 +67,9 @@ func (s *Service) ChangeStatus(ctx context.Context, task domain.Task, status dom
 	if err := validateStatus(status); err != nil {
 		return mo.Err[domain.Task](err)
 	}
-	next := domain.Task{
-		ID:        bson.NewObjectID(),
-		OriginID:  &task.ID,
-		Title:     task.Title,
-		Status:    status,
-		CreatedAt: time.Now(),
+	next := task.ChangeStatus(status)
+	if result := s.repo.Save(ctx, next); result.IsError() {
+		return mo.Err[domain.Task](result.Error())
 	}
 	s.publisher.Publish(ctx, event.Event{Type: domain.EventStatusChanged, Payload: next})
 	return mo.Ok(next)

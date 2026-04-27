@@ -15,49 +15,29 @@ type Publisher interface {
 	Publish(ctx context.Context, e Event)
 }
 
-type Handler interface {
-	Handle(ctx context.Context, e Event) error
-}
-
-type HandlerFunc func(ctx context.Context, e Event) error
-
-func (f HandlerFunc) Handle(ctx context.Context, e Event) error { return f(ctx, e) }
-
-const Wildcard = "*"
-
 type EventBus struct {
 	mu       sync.RWMutex
-	handlers map[string][]Handler
+	handlers map[string][]func(context.Context, Event) error
 }
 
 func NewEventBus() *EventBus {
-	return &EventBus{handlers: make(map[string][]Handler)}
+	return &EventBus{handlers: make(map[string][]func(context.Context, Event) error)}
 }
 
-func (b *EventBus) Subscribe(eventType string, h Handler) {
+func (b *EventBus) Subscribe(eventType string, fn func(context.Context, Event) error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.handlers[eventType] = append(b.handlers[eventType], h)
-}
-
-func (b *EventBus) SubscribeFunc(eventType string, fn func(context.Context, Event) error) {
-	b.Subscribe(eventType, HandlerFunc(fn))
+	b.handlers[eventType] = append(b.handlers[eventType], fn)
 }
 
 func (b *EventBus) Publish(ctx context.Context, e Event) {
 	b.mu.RLock()
-	typed := b.handlers[e.Type]
-	wildcards := b.handlers[Wildcard]
+	handlers := b.handlers[e.Type]
 	b.mu.RUnlock()
 
-	for _, h := range typed {
-		if err := h.Handle(ctx, e); err != nil {
+	for _, fn := range handlers {
+		if err := fn(ctx, e); err != nil {
 			slog.Error("eventbus: handler error", "event_type", e.Type, "err", err)
-		}
-	}
-	for _, h := range wildcards {
-		if err := h.Handle(ctx, e); err != nil {
-			slog.Error("eventbus: wildcard handler error", "event_type", e.Type, "err", err)
 		}
 	}
 }
