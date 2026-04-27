@@ -53,6 +53,7 @@ func main() {
 	app.Get("/health", healthHandler.CheckHealth)
 	app.Post("/tasks", taskHandler.Create)
 	app.Get("/tasks", taskHandler.List)
+	app.Get("/tasks/:id", taskHandler.Detail)
 	app.Patch("/tasks/:id/status", taskHandler.ChangeStatus)
 
 	log.Fatal(app.Listen(":3000"))

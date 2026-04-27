@@ -61,6 +61,10 @@ func (s *Service) ListTasks(ctx context.Context) mo.Result[[]domain.Task] {
 	return s.repo.FindAll(ctx)
 }
 
+func (s *Service) GetTask(ctx context.Context, id bson.ObjectID) mo.Result[domain.Task] {
+	return s.repo.FindByID(ctx, id)
+}
+
 func (s *Service) ChangeStatus(ctx context.Context, id bson.ObjectID, status domain.Status) mo.Result[domain.Task] {
 	if err := validateStatus(status); err != nil {
 		return mo.Err[domain.Task](err)
