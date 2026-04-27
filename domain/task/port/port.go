@@ -16,7 +16,7 @@ type UseCase interface {
 }
 
 type Repository interface {
-	Save(ctx context.Context, task domain.Task) mo.Result[struct{}]
+	Append(ctx context.Context, aggregateID bson.ObjectID, eventType string, payload any) mo.Result[struct{}]
 	FindAll(ctx context.Context) mo.Result[[]domain.Task]
 	FindByID(ctx context.Context, id bson.ObjectID) mo.Result[domain.Task]
 }
