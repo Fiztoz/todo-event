@@ -5,7 +5,8 @@ const BASE = '/api'
 export async function listTasks(): Promise<Task[]> {
   const res = await fetch(`${BASE}/tasks`)
   if (!res.ok) throw new Error('failed to list tasks')
-  return res.json()
+  const data = await res.json()
+  return data ?? []
 }
 
 export async function getTask(id: string): Promise<Task> {

@@ -33,16 +33,17 @@ func (r *MongoRepository) getClient() mo.Either[error, *mongo.Client] {
 	return r.cached
 }
 
-func (r *MongoRepository) collection() (*mongo.Collection, error) {
+func (r *MongoRepository) db() (*mongo.Database, error) {
 	either := r.getClient()
 	if either.IsLeft() {
 		return nil, either.MustLeft()
 	}
-	return either.MustRight().Database("todoe").Collection("task_events"), nil
+	return either.MustRight().Database("todoe"), nil
 }
 
+// Append writes a domain event to the event store (task_events).
 func (r *MongoRepository) Append(ctx context.Context, aggregateID bson.ObjectID, eventType string, payload any) mo.Result[struct{}] {
-	col, err := r.collection()
+	db, err := r.db()
 	if err != nil {
 		return mo.Err[struct{}](err)
 	}
@@ -57,68 +58,53 @@ func (r *MongoRepository) Append(ctx context.Context, aggregateID bson.ObjectID,
 		Payload:     raw,
 		CreatedAt:   time.Now(),
 	}
-	if _, err := col.InsertOne(ctx, e); err != nil {
+	if _, err := db.Collection("task_events").InsertOne(ctx, e); err != nil {
 		return mo.Err[struct{}](err)
 	}
 	return mo.Ok(struct{}{})
 }
 
+// Upsert writes the current task state to the read model (tasks_view).
+func (r *MongoRepository) Upsert(ctx context.Context, task domain.Task) mo.Result[struct{}] {
+	db, err := r.db()
+	if err != nil {
+		return mo.Err[struct{}](err)
+	}
+	filter := bson.D{{Key: "_id", Value: task.ID}}
+	update := bson.D{{Key: "$set", Value: task}}
+	if _, err := db.Collection("tasks_view").UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true)); err != nil {
+		return mo.Err[struct{}](err)
+	}
+	return mo.Ok(struct{}{})
+}
+
+// FindByID reads current task state from the read model (tasks_view).
 func (r *MongoRepository) FindByID(ctx context.Context, id bson.ObjectID) mo.Result[domain.Task] {
-	col, err := r.collection()
+	db, err := r.db()
 	if err != nil {
 		return mo.Err[domain.Task](err)
 	}
-	cursor, err := col.Find(ctx,
-		bson.D{{Key: "aggregate_id", Value: id}},
-		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}),
-	)
-	if err != nil {
-		return mo.Err[domain.Task](err)
-	}
-	defer cursor.Close(ctx)
-	var events []domain.StoredEvent
-	if err := cursor.All(ctx, &events); err != nil {
-		return mo.Err[domain.Task](err)
-	}
-	task, err := domain.Apply(id, events)
-	if err != nil {
+	var task domain.Task
+	if err := db.Collection("tasks_view").FindOne(ctx, bson.D{{Key: "_id", Value: id}}).Decode(&task); err != nil {
 		return mo.Err[domain.Task](err)
 	}
 	return mo.Ok(task)
 }
 
+// FindAll reads all current task states from the read model (tasks_view).
 func (r *MongoRepository) FindAll(ctx context.Context) mo.Result[[]domain.Task] {
-	col, err := r.collection()
+	db, err := r.db()
 	if err != nil {
 		return mo.Err[[]domain.Task](err)
 	}
-	pipeline := mongo.Pipeline{
-		bson.D{{Key: "$sort", Value: bson.D{{Key: "_id", Value: 1}}}},
-		bson.D{{Key: "$group", Value: bson.D{
-			{Key: "_id", Value: "$aggregate_id"},
-			{Key: "events", Value: bson.D{{Key: "$push", Value: "$$ROOT"}}},
-		}}},
-	}
-	cursor, err := col.Aggregate(ctx, pipeline)
+	cursor, err := db.Collection("tasks_view").Find(ctx, bson.D{})
 	if err != nil {
 		return mo.Err[[]domain.Task](err)
 	}
 	defer cursor.Close(ctx)
-
-	var tasks []domain.Task
-	for cursor.Next(ctx) {
-		var group struct {
-			AggregateID bson.ObjectID       `bson:"_id"`
-			Events      []domain.StoredEvent `bson:"events"`
-		}
-		if err := cursor.Decode(&group); err != nil {
-			return mo.Err[[]domain.Task](err)
-		}
-		task, err := domain.Apply(group.AggregateID, group.Events)
-		if err != nil {
-			return mo.Err[[]domain.Task](err)
-		}
-		tasks = append(tasks, task)
+	tasks := []domain.Task{}
+	if err := cursor.All(ctx, &tasks); err != nil {
+		return mo.Err[[]domain.Task](err)
 	}
 	return mo.Ok(tasks)
 }
