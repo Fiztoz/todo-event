@@ -10,6 +10,7 @@ import (
 
 	"todoe/domain/task/domain"
 	"todoe/domain/task/port"
+	"todoe/internal/event"
 )
 
 var (
@@ -53,7 +54,7 @@ func (s *Service) CreateTask(ctx context.Context, title string) mo.Result[domain
 		Status:    domain.StatusPending,
 		CreatedAt: time.Now(),
 	}
-	s.publisher.Publish(domain.EventCreated, domain.CreatedPayload{Task: task})
+	s.publisher.Publish(ctx, event.Event{Type: domain.EventCreated, Payload: task})
 	return mo.Ok(task)
 }
 
@@ -61,21 +62,22 @@ func (s *Service) ListTasks(ctx context.Context) mo.Result[[]domain.Task] {
 	return s.repo.FindAll(ctx)
 }
 
-func (s *Service) GetTask(ctx context.Context, id bson.ObjectID) mo.Result[domain.Task] {
-	return s.repo.FindByID(ctx, id)
-}
-
-func (s *Service) ChangeStatus(ctx context.Context, task domain.Task, status domain.Status) mo.Result[domain.Task] {
+func (s *Service) ChangeStatus(ctx context.Context, id bson.ObjectID, status domain.Status) mo.Result[domain.Task] {
 	if err := validateStatus(status); err != nil {
 		return mo.Err[domain.Task](err)
 	}
+	current := s.repo.FindByID(ctx, id)
+	if current.IsError() {
+		return mo.Err[domain.Task](current.Error())
+	}
+	prev := current.MustGet()
 	next := domain.Task{
 		ID:        bson.NewObjectID(),
-		OriginID:  &task.ID,
-		Title:     task.Title,
+		OriginID:  &prev.ID,
+		Title:     prev.Title,
 		Status:    status,
 		CreatedAt: time.Now(),
 	}
-	s.publisher.Publish(domain.EventStatusChanged, domain.StatusChangedPayload{Task: next})
+	s.publisher.Publish(ctx, event.Event{Type: domain.EventStatusChanged, Payload: next})
 	return mo.Ok(next)
 }
