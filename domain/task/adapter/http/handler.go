@@ -41,10 +41,7 @@ func (h *Handler) List(c *fiber.Ctx) error {
 	if result.IsError() {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal error"})
 	}
-	tasks := result.MustGet()
-	if tasks == nil {
-		tasks = []domain.Task{}
-	}
+	tasks := result.OrElse([]domain.Task{})
 	return c.JSON(tasks)
 }
 
@@ -80,7 +77,7 @@ func (h *Handler) ChangeStatus(c *fiber.Ctx) error {
 		if errors.Is(result.Error(), application.ErrInvalidStatus) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": result.Error().Error()})
 		}
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "task not found"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal error"})
 	}
 	return c.JSON(result.MustGet())
 }

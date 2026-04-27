@@ -7,6 +7,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"todoe/domain/task/domain"
+	"todoe/internal/event"
 )
 
 type UseCase interface {
@@ -23,5 +24,5 @@ type Repository interface {
 }
 
 type Publisher interface {
-	Publish(name string, payload any)
+	Publish(ctx context.Context, e event.Event)
 }

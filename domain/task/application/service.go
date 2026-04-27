@@ -10,6 +10,7 @@ import (
 
 	"todoe/domain/task/domain"
 	"todoe/domain/task/port"
+	"todoe/internal/event"
 )
 
 var (
@@ -53,7 +54,7 @@ func (s *Service) CreateTask(ctx context.Context, title string) mo.Result[domain
 		Status:    domain.StatusPending,
 		CreatedAt: time.Now(),
 	}
-	s.publisher.Publish(domain.EventCreated, domain.CreatedPayload{Task: task})
+	s.publisher.Publish(ctx, event.Event{Type: domain.EventCreated, Payload: task})
 	return mo.Ok(task)
 }
 
@@ -76,6 +77,6 @@ func (s *Service) ChangeStatus(ctx context.Context, task domain.Task, status dom
 		Status:    status,
 		CreatedAt: time.Now(),
 	}
-	s.publisher.Publish(domain.EventStatusChanged, domain.StatusChangedPayload{Task: next})
+	s.publisher.Publish(ctx, event.Event{Type: domain.EventStatusChanged, Payload: next})
 	return mo.Ok(next)
 }

@@ -34,11 +34,3 @@ type Task struct {
 	Status    Status         `bson:"status" json:"status"`
 	CreatedAt time.Time      `bson:"created_at" json:"created_at"`
 }
-
-type CreatedPayload struct {
-	Task Task
-}
-
-type StatusChangedPayload struct {
-	Task Task
-}

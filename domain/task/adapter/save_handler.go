@@ -2,24 +2,31 @@ package adapter
 
 import (
 	"context"
-	"log"
+	"fmt"
 
 	"todoe/domain/task/domain"
+	"todoe/internal/event"
 )
 
-func NewSaveHandler(repo *MongoRepository) func(any) {
-	return func(payload any) {
-		var task domain.Task
-		switch p := payload.(type) {
-		case domain.CreatedPayload:
-			task = p.Task
-		case domain.StatusChangedPayload:
-			task = p.Task
-		default:
-			return
+type SaveHandler struct {
+	repo *MongoRepository
+}
+
+func NewSaveHandler(repo *MongoRepository) *SaveHandler {
+	return &SaveHandler{repo: repo}
+}
+
+func (h *SaveHandler) Handle(ctx context.Context, e event.Event) error {
+	task, ok := e.Payload.(domain.Task)
+	if e.Type == domain.EventStatusChanged || e.Type == domain.EventCreated {
+		if !ok {
+			return fmt.Errorf("unexpected payload type %T", e.Payload)
 		}
-		if result := repo.Save(context.Background(), task); result.IsError() {
-			log.Printf("save task failed: %v", result.Error())
+		result := h.repo.Save(ctx, task)
+		if result.IsError() {
+			return result.Error()
 		}
+		return nil
 	}
+	return fmt.Errorf("unsupported event type %s", e.Type)
 }

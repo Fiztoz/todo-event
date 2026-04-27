@@ -37,11 +37,12 @@ func main() {
 	healthService := healthapp.NewService(healthRepo)
 	healthHandler := healthhttp.NewHandler(healthService)
 
-	bus := event.NewBus()
+	bus := event.NewEventBus()
 	taskRepo := taskadapter.NewMongoRepository(clientIO)
 	saveHandler := taskadapter.NewSaveHandler(taskRepo)
 	bus.Subscribe(taskdomain.EventCreated, saveHandler)
 	bus.Subscribe(taskdomain.EventStatusChanged, saveHandler)
+
 	taskService := taskapplication.NewService(taskRepo, bus)
 	taskHandler := taskhttp.NewHandler(taskService)
 
