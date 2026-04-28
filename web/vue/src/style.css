@@ -145,6 +145,18 @@ body {
   text-overflow: ellipsis;
 }
 .task-item.done .task-title { text-decoration: line-through; color: var(--text-muted); }
+.task-title-input {
+  font-size: 0.95rem;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid var(--blue);
+  outline: none;
+  padding: 0;
+  width: 100%;
+}
 
 /* Status badge */
 .badge {

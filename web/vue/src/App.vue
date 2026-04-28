@@ -18,7 +18,7 @@
       <div v-if="tasks.length === 0" class="state-msg">No tasks yet. Add one above.</div>
       <ul v-else class="task-list">
         <li v-for="task in tasks" :key="task.id">
-          <TaskItem :task="task" @updated="onUpdated" />
+          <TaskItem :task="task" @updated="onUpdated" @renamed="onRenamed" />
         </li>
       </ul>
     </template>
@@ -55,6 +55,11 @@ function onCreated(task: Task): void {
 function onUpdated(updated: Task): void {
   const i = tasks.value.findIndex(t => t.id === updated.id)
   if (i !== -1) tasks.value[i] = updated
+}
+
+function onRenamed(task: Task): void {
+  const i = tasks.value.findIndex(t => t.id === task.id)
+  if (i !== -1) tasks.value[i] = task
 }
 
 onMounted(load)
