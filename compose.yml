@@ -12,5 +12,12 @@ services:
     volumes:
       - mongo-data:/data/db
 
+  nats:
+    image: nats:latest
+    container_name: todoe-nats
+    restart: unless-stopped
+    ports:
+      - "4222:4222"
+
 volumes:
   mongo-data:
