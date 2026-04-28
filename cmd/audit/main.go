@@ -1,40 +1,61 @@
 package main
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/samber/mo"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	auditadapter "todoe/internal/audit/adapter"
-	auditdomain "todoe/internal/audit/domain"
 	"todoe/internal/messaging"
 )
 
-func main() {
-	mongoURI := os.Getenv("MONGO_URI")
-	if mongoURI == "" {
-		mongoURI = "mongodb://root:root@localhost:27017"
+type lokiPush struct {
+	Streams []lokiStream `json:"streams"`
+}
+
+type lokiStream struct {
+	Stream map[string]string `json:"stream"`
+	Values [][2]string       `json:"values"`
+}
+
+func pushToLoki(lokiURL, eventType string, payload json.RawMessage) error {
+	line, _ := json.Marshal(map[string]any{
+		"event_type": eventType,
+		"payload":    payload,
+	})
+	body := lokiPush{Streams: []lokiStream{{
+		Stream: map[string]string{"service": "audit", "event_type": eventType},
+		Values: [][2]string{{fmt.Sprintf("%d", time.Now().UnixNano()), string(line)}},
+	}}}
+	data, _ := json.Marshal(body)
+	resp, err := http.Post(lokiURL+"/loki/api/v1/push", "application/json", bytes.NewReader(data))
+	if err != nil {
+		return err
 	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("loki push: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func main() {
 	natsURL := os.Getenv("NATS_URL")
 	if natsURL == "" {
 		natsURL = nats.DefaultURL
 	}
-
-	clientIO := mo.NewIOEither(func() (*mongo.Client, error) {
-		return mongo.Connect(options.Client().ApplyURI(mongoURI))
-	})
-	auditRepo := auditadapter.NewMongoRepository(clientIO)
+	lokiURL := os.Getenv("LOKI_URL")
+	if lokiURL == "" {
+		lokiURL = "http://localhost:3100"
+	}
 
 	nc, err := nats.Connect(natsURL)
 	if err != nil {
@@ -48,17 +69,9 @@ func main() {
 			slog.Error("audit: unmarshal", "err", err)
 			return
 		}
-		var payload any
-		json.Unmarshal(msg.Payload, &payload)
-		entry := auditdomain.AuditEntry{
-			ID:        bson.NewObjectID(),
-			EventType: msg.Type,
-			Payload:   payload,
-			CreatedAt: time.Now(),
-		}
 		slog.Info("audit: received event", "type", msg.Type)
-		if r := auditRepo.Save(context.Background(), entry); r.IsError() {
-			slog.Error("audit: save", "err", r.Error())
+		if err := pushToLoki(lokiURL, msg.Type, msg.Payload); err != nil {
+			slog.Error("audit: loki push", "err", err)
 		}
 	})
 
