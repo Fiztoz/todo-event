@@ -56,6 +56,7 @@ func main() {
 			Payload:   payload,
 			CreatedAt: time.Now(),
 		}
+		slog.Info("audit: received event", "type", msg.Type)
 		if r := auditRepo.Save(context.Background(), entry); r.IsError() {
 			slog.Error("audit: save", "err", r.Error())
 		}
