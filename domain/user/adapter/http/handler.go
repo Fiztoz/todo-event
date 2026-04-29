@@ -57,6 +57,18 @@ func (h *Handler) VerifyEmail(c *fiber.Ctx) error {
 	return c.JSON(result.MustGet())
 }
 
+func (h *Handler) GetUser(c *fiber.Ctx) error {
+	id, err := bson.ObjectIDFromHex(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid id"})
+	}
+	result := h.useCase.GetUser(c.Context(), id)
+	if result.IsError() {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
+	}
+	return c.JSON(result.MustGet())
+}
+
 func (h *Handler) CompleteProfile(c *fiber.Ctx) error {
 	id, err := bson.ObjectIDFromHex(c.Params("id"))
 	if err != nil {

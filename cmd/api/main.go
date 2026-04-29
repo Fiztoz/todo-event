@@ -140,6 +140,7 @@ func main() {
 	app.Get("/tasks/:id", taskHandler.Detail)
 	app.Patch("/tasks/:id/status", taskHandler.ChangeStatus)
 	app.Post("/users/register", userHandler.Register)
+	app.Get("/users/:id", userHandler.GetUser)
 	app.Post("/users/:id/verify-email", userHandler.VerifyEmail)
 	app.Post("/users/:id/complete-profile", userHandler.CompleteProfile)
 

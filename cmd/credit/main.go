@@ -20,7 +20,7 @@ import (
 func fakeCreditAPI(email string) (score int, approved bool) {
 	h := fnv.New32a()
 	h.Write([]byte(email))
-	score = 300 + int(h.Sum32()%551)
+	score = 400 + int(h.Sum32()%551)
 	return score, score >= 600
 }
 

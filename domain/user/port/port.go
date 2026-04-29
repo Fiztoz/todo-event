@@ -15,6 +15,7 @@ type UseCase interface {
 	VerifyEmail(ctx context.Context, id bson.ObjectID, token string) mo.Result[domain.User]
 	RecordCreditScore(ctx context.Context, id bson.ObjectID, score int, approved bool) mo.Result[domain.User]
 	CompleteProfile(ctx context.Context, id bson.ObjectID, bio string) mo.Result[domain.User]
+	GetUser(ctx context.Context, id bson.ObjectID) mo.Result[domain.User]
 }
 
 type Repository interface {

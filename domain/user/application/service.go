@@ -88,6 +88,10 @@ func (s *Service) RecordCreditScore(ctx context.Context, id bson.ObjectID, score
 	return mo.Ok(next)
 }
 
+func (s *Service) GetUser(ctx context.Context, id bson.ObjectID) mo.Result[domain.User] {
+	return s.repo.FindByID(ctx, id)
+}
+
 func (s *Service) CompleteProfile(ctx context.Context, id bson.ObjectID, bio string) mo.Result[domain.User] {
 	current := s.repo.FindByID(ctx, id)
 	if current.IsError() {
