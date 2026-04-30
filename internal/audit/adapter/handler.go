@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -18,6 +19,7 @@ func NewAuditHandler(repo *MongoRepository) func(context.Context, event.Event) e
 			Payload:   e.Payload,
 			CreatedAt: time.Now(),
 		}
+		slog.Info("audit: handling event", "event_type", e.Type)
 		result := repo.Save(ctx, entry)
 		if result.IsError() {
 			return result.Error()
