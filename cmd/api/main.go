@@ -14,7 +14,9 @@ import (
 	healthhttp "todoe/internal/health/adapter/http"
 	healthapp "todoe/internal/health/application"
 
+	taskadapter "todoe/domain/task/adapter"
 	taskhttp "todoe/domain/task/adapter/http"
+	taskapplication "todoe/domain/task/application"
 )
 
 func main() {
@@ -33,7 +35,9 @@ func main() {
 	healthService := healthapp.NewService(healthRepo)
 	healthHandler := healthhttp.NewHandler(healthService)
 
-	taskHandler := taskhttp.NewHandler(nil)
+	taskRepo := taskadapter.NewMongoRepository(clientIO)
+	taskService := taskapplication.NewService(taskRepo)
+	taskHandler := taskhttp.NewHandler(taskService)
 
 	app := fiber.New()
 	app.Get("/health", healthHandler.CheckHealth)
