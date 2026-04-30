@@ -28,6 +28,7 @@ func (b *EventBus) Subscribe(eventType string, fn func(context.Context, Event) e
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.handlers[eventType] = append(b.handlers[eventType], fn)
+	slog.Debug("eventbus: handler subscribed", "event_type", eventType)
 }
 
 func (b *EventBus) Publish(ctx context.Context, e Event) {
@@ -39,6 +40,7 @@ func (b *EventBus) Publish(ctx context.Context, e Event) {
 		if err := fn(ctx, e); err != nil {
 			slog.Error("eventbus: handler error", "event_type", e.Type, "err", err)
 		}
+		slog.Debug("eventbus: event published", "event_type", e.Type)
 	}
 }
 
