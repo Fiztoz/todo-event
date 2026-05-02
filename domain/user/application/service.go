@@ -110,5 +110,13 @@ func (s *Service) CompleteProfile(ctx context.Context, id bson.ObjectID, bio str
 		return mo.Err[domain.User](r.Error())
 	}
 	s.publisher.Publish(ctx, event.Event{Type: domain.EventProfileCompleted, Payload: next})
+	s.publisher.Publish(ctx, event.Event{
+		Type: domain.EventUserActivated,
+		Payload: domain.UserActivatedPayload{
+			UserID: next.ID.Hex(),
+			Email:  next.Email,
+			Name:   next.Name,
+		},
+	})
 	return mo.Ok(next)
 }

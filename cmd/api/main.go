@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -17,6 +18,11 @@ import (
 	healthadapter "todoe/internal/health/adapter"
 	healthhttp "todoe/internal/health/adapter/http"
 	healthapp "todoe/internal/health/application"
+
+	authenAdapter "todoe/internal/authen/adapter"
+	authenhttp "todoe/internal/authen/adapter/http"
+	authenapp "todoe/internal/authen/application"
+	authendomain "todoe/internal/authen/domain"
 
 	taskadapter "todoe/domain/task/adapter"
 	taskhttp "todoe/domain/task/adapter/http"
@@ -106,6 +112,33 @@ func main() {
 	userService := userapplication.NewService(userRepo, userPublisher)
 	userHandler := userhttp.NewHandler(userService)
 
+	// ── Authen domain ────────────────────────────────────────────────────
+	authenBus := event.NewEventBus()
+	authenRepo := authenAdapter.NewMongoRepository(clientIO)
+	authenProjection := authenAdapter.NewProjectionHandler(authenRepo)
+	authenBus.Subscribe(authendomain.EventLoggedIn, authenProjection)
+	authenBus.Subscribe(authendomain.EventLoggedOut, authenProjection)
+	authenService := authenapp.NewService(authenRepo, authenBus)
+	authenHandler := authenhttp.NewHandler(authenService)
+
+	// user.activated → create auth credential for the newly onboarded user
+	userBus.Subscribe(userdomain.EventUserActivated, func(ctx context.Context, e event.Event) error {
+		p, ok := e.Payload.(userdomain.UserActivatedPayload)
+		if !ok {
+			slog.Error("api: user.activated unexpected payload", "type", fmt.Sprintf("%T", e.Payload))
+			return nil
+		}
+		userID, err := bson.ObjectIDFromHex(p.UserID)
+		if err != nil {
+			slog.Error("api: user.activated invalid user id", "err", err)
+			return nil
+		}
+		if r := authenService.ActivateUser(ctx, userID, p.Email, p.Name); r.IsError() {
+			slog.Error("api: user.activated credential creation failed", "err", r.Error())
+		}
+		return nil
+	})
+
 	// ── Credit result loop-back ──────────────────────────────────────────
 	// cmd/credit publishes credit.results → api calls RecordCreditScore
 	nc.Subscribe(messaging.CreditResultSubject, func(m *nats.Msg) {
@@ -133,12 +166,30 @@ func main() {
 	})
 
 	// ── HTTP ─────────────────────────────────────────────────────────────
+	authMiddleware := func(c *fiber.Ctx) error {
+		token := c.Get("Authorization")
+		if token == "" {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing token"})
+		}
+		if r := authenService.ValidateToken(c.Context(), token); r.IsError() {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+		}
+		return c.Next()
+	}
+
 	app := fiber.New()
 	app.Get("/health", healthHandler.CheckHealth)
-	app.Post("/tasks", taskHandler.Create)
-	app.Get("/tasks", taskHandler.List)
-	app.Get("/tasks/:id", taskHandler.Detail)
-	app.Patch("/tasks/:id/status", taskHandler.ChangeStatus)
+
+	app.Post("/auth/register", authenHandler.RegisterCredential)
+	app.Post("/auth/login", authenHandler.Login)
+	app.Post("/auth/logout", authenHandler.Logout)
+
+	tasks := app.Group("/tasks", authMiddleware)
+	tasks.Post("/", taskHandler.Create)
+	tasks.Get("/", taskHandler.List)
+	tasks.Get("/:id", taskHandler.Detail)
+	tasks.Patch("/:id/status", taskHandler.ChangeStatus)
+
 	app.Post("/users/register", userHandler.Register)
 	app.Get("/users/:id", userHandler.GetUser)
 	app.Post("/users/:id/verify-email", userHandler.VerifyEmail)

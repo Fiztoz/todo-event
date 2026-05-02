@@ -6,3 +6,12 @@ export interface Task {
   status: Status
   created_at: string
 }
+
+export interface Session {
+  id: string
+  user_id: string
+  token: string
+  active: boolean
+  created_at: string
+  expires_at: string
+}

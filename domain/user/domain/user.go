@@ -21,6 +21,7 @@ const (
 	EventEmailVerified    = "user.email_verified"
 	EventCreditScored     = "user.credit_scored"
 	EventProfileCompleted = "user.profile_completed"
+	EventUserActivated    = "user.activated"
 )
 
 type User struct {
@@ -55,6 +56,12 @@ type CreditScoredPayload struct {
 type ProfileCompletedPayload struct {
 	UserID string `bson:"user_id" json:"user_id"`
 	Bio    string `bson:"bio"     json:"bio"`
+}
+
+type UserActivatedPayload struct {
+	UserID string `bson:"user_id" json:"user_id"`
+	Email  string `bson:"email"   json:"email"`
+	Name   string `bson:"name"    json:"name"`
 }
 
 // Pure state transitions
