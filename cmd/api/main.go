@@ -119,6 +119,7 @@ func main() {
 			slog.Error("api: user.activated invalid user id", "err", err)
 			return
 		}
+		// Get full user info from onboarding service via gRPC
 		resp, err := onboardingClient.GetUser(context.Background(), &pb.GetUserRequest{UserId: p.UserID})
 		if err != nil {
 			slog.Error("api: user.activated grpc GetUser failed", "err", err)
