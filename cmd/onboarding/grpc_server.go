@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"google.golang.org/grpc/codes"
@@ -17,6 +18,7 @@ type userGRPCServer struct {
 }
 
 func (s *userGRPCServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {
+	slog.Info("onboarding gRPC: GetUser called", "user_id", req.UserId)
 	id, err := bson.ObjectIDFromHex(req.UserId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid user id: %v", err)
