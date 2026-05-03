@@ -1,153 +1,178 @@
 # todoe
 
-Modular monolith with Ports & Adapters architecture, append-only persistence, and event-driven side effects.
+Distributed task management system demonstrating:
+
+- **Ports & Adapters** (hexagonal) architecture
+- **Append-only event store** with CQRS read models
+- **Choreography-based sagas** via NATS
+- **Database-per-service** isolation
+- **Authentication** with session tokens and bcrypt credentials
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────┐   ┌──────────────────────────────────┐
+│         cmd/api  :3000          │   │      cmd/onboarding  :3002        │
+│                                 │   │                                   │
+│  Tasks (auth-protected CRUD)    │   │  User registration                │
+│  Auth  (login / logout)         │   │  Email verification               │
+│  DB: todoe                      │   │  Profile completion               │
+│                                 │   │  DB: todoe_onboarding             │
+└────────────┬────────────────────┘   └──────────────┬────────────────────┘
+             │  NATS: user.activated                  │  NATS: user.events
+             │◄───────────────────────────────────────┘
+             │
+         ┌───▼──────────────────────────────────────────────────┐
+         │                       NATS                           │
+         │  user.events · task.events · credit.results          │
+         └───┬──────────────┬──────────────┬────────────────────┘
+             │              │              │
+      ┌──────▼───┐   ┌──────▼───┐   ┌─────▼──────┐
+      │ cmd/audit│   │cmd/credit│   │cmd/welcome │
+      │ → Loki   │   │→ scores  │   │→ logs steps│
+      └──────────┘   └──────────┘   └────────────┘
+```
+
+### Services
+
+| Binary | Port | Database | Responsibility |
+|---|---|---|---|
+| `cmd/api` | 3000 | `todoe` | Tasks (protected), Auth |
+| `cmd/onboarding` | 3002 | `todoe_onboarding` | User registration → activation |
+| `cmd/credit` | — | — | Credit scoring via NATS |
+| `cmd/audit` | — | — | Event log to Loki |
+| `cmd/welcome` | — | — | Onboarding step logger |
+
+### Onboarding → Auth handoff
+
+When a user completes onboarding, `cmd/onboarding` emits `user.activated` on NATS. `cmd/api` subscribes and automatically creates a bcrypt credential — the generated temp password is logged to stdout.
+
+---
 
 ## Prerequisites
 
-Install these first:
-
 - Go `1.25+`
 - Docker + Docker Compose
-- Bun `1.x` (for frontend apps)
-- `curl` (for quick API checks)
+- Bun `1.x` (frontend)
 
-## Repo Setup
-
-```bash
-# from repo root
-go mod download
-go mod verify
-```
-
-Frontend dependencies:
+## Setup
 
 ```bash
-cd web/vue && bun install
-cd ../onboarding && bun install
-cd ../..
+go mod download && go mod verify
+cd web/vue && bun install && cd ../..
+cd web/onboarding && bun install && cd ../..
 ```
 
 ## Environment Variables
 
-The backend binaries use environment variables, but all of them have local defaults.
+All have local defaults — no `.env` required for development.
 
-Create a `.env` (optional but recommended) in repo root:
-
-```env
-# API
-MONGO_URI=mongodb://root:root@localhost:27017
-NATS_URL=nats://localhost:4222
-
-# Audit service
-LOKI_URL=http://localhost:3100
-```
-
-If omitted:
-- `MONGO_URI` defaults to `mongodb://root:root@localhost:27017`
-- `NATS_URL` defaults to `nats://127.0.0.1:4222`
-- `LOKI_URL` defaults to `http://localhost:3100`
+| Variable | Default | Used by |
+|---|---|---|
+| `MONGO_URI` | `mongodb://root:root@localhost:27017` | api, onboarding |
+| `NATS_URL` | `nats://127.0.0.1:4222` | all services |
+| `DB_NAME` | `todoe` (api) / `todoe_onboarding` (onboarding) | api, onboarding |
+| `PORT` | `3000` (api) / `3002` (onboarding) | api, onboarding |
+| `LOKI_URL` | `http://localhost:3100` | audit |
 
 ## Start Infrastructure
 
-Run MongoDB, NATS, Loki, Grafana:
-
 ```bash
-docker compose -f compose.yml up -d
+docker compose up -d
 ```
 
-Exposed ports:
-- MongoDB: `27017`
-- NATS: `4222`
-- Loki: `3100`
-- Grafana: `3001` (container `3000`)
+Ports: MongoDB `27017` · NATS `4222` · Loki `3100` · Grafana `3001`
 
-## Run Services (4 terminals)
+## Run Services
 
-### 1) API
+Open a terminal per service:
 
 ```bash
-go run ./cmd/api
+go run ./cmd/api          # :3000 — tasks + auth
+go run ./cmd/onboarding   # :3002 — user onboarding
+go run ./cmd/credit       # credit scoring worker
+go run ./cmd/welcome      # onboarding step logger
+go run ./cmd/audit        # event audit → Loki
 ```
 
-API listens on `http://localhost:3000`.
-
-### 2) Welcome worker
+## Frontends
 
 ```bash
-go run ./cmd/welcome
+cd web/vue && bun run dev        # tasks UI  → http://localhost:5173
+cd web/onboarding && bun run dev # onboarding UI → http://localhost:5174
 ```
 
-### 3) Credit worker
+Both proxy `/api` to `http://localhost:3000`. The onboarding UI proxies `/api` to `:3000` as well — register/verify calls should target `:3002` directly or adjust the proxy.
+
+## End-to-End Flow
+
+### 1. Onboard a user (port 3002)
 
 ```bash
-go run ./cmd/credit
+# Register
+curl -s -X POST http://localhost:3002/users/register \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Alice","email":"alice@example.com"}' | jq .
+
+# Verify email (copy token from cmd/welcome log)
+curl -s -X POST http://localhost:3002/users/<id>/verify-email \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"<token>"}' | jq .
+
+# Complete profile (after credit approved — watch cmd/welcome logs)
+curl -s -X POST http://localhost:3002/users/<id>/complete-profile \
+  -H 'Content-Type: application/json' \
+  -d '{"bio":"Software engineer"}' | jq .
 ```
 
-### 4) Audit worker
-
-```bash
-go run ./cmd/audit
+After `complete-profile`, `cmd/api` logs the generated temp password:
+```
+INFO auth: user activated — credential created email=alice@example.com temp_password=<password>
 ```
 
-## Run Frontends (optional)
-
-### Task UI
+### 2. Log in and use tasks (port 3000)
 
 ```bash
-cd web/vue
-bun run dev
+# Login
+TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"alice@example.com","password":"<temp_password>"}' | jq -r .token)
+
+# Create a task
+curl -s -X POST http://localhost:3000/tasks/ \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: $TOKEN" \
+  -d '{"title":"my first task"}' | jq .
+
+# List tasks
+curl -s http://localhost:3000/tasks/ -H "Authorization: $TOKEN" | jq .
 ```
 
-### Onboarding UI
+### Register standalone credentials (optional)
 
 ```bash
-cd web/onboarding
-bun run dev
-```
-
-## Quick Verification
-
-Health check:
-
-```bash
-curl http://localhost:3000/health
-```
-
-Create a task:
-
-```bash
-curl -X POST http://localhost:3000/tasks \
-  -H "Content-Type: application/json" \
-  -d '{"title":"first task","description":"setup complete"}'
-```
-
-List tasks:
-
-```bash
-curl http://localhost:3000/tasks
+curl -s -X POST http://localhost:3000/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"dev@local.com","password":"secret"}' | jq .
 ```
 
 ## Build & Test
 
 ```bash
-go build ./cmd/api
+go build ./...
 go test ./...
 ```
 
 ## Observability
 
 - Grafana: [http://localhost:3001](http://localhost:3001)
-- Loki datasource is provisioned from `provisioning/`.
-- Audit events are pushed by `cmd/audit` into Loki.
+- Audit events pushed by `cmd/audit` into Loki (provisioned automatically)
 
-## Stop Everything
-
-```bash
-docker compose -f compose.yml down
-```
-
-To also remove persisted volumes:
+## Stop
 
 ```bash
-docker compose -f compose.yml down -v
+docker compose down          # stop containers
+docker compose down -v       # stop + remove volumes
 ```
