@@ -58,10 +58,10 @@ type ProfileCompletedPayload struct {
 	Bio    string `bson:"bio"     json:"bio"`
 }
 
+// UserActivatedPayload is an event notification — carries only the ID.
+// Consumers that need full user details must call back to the onboarding service.
 type UserActivatedPayload struct {
 	UserID string `bson:"user_id" json:"user_id"`
-	Email  string `bson:"email"   json:"email"`
-	Name   string `bson:"name"    json:"name"`
 }
 
 // Pure state transitions

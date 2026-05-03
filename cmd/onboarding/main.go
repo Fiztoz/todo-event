@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"log/slog"
+	"net"
 	"os"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,6 +14,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"google.golang.org/grpc"
 
 	healthadapter "todoe/internal/health/adapter"
 	healthhttp "todoe/internal/health/adapter/http"
@@ -25,6 +27,7 @@ import (
 
 	"todoe/internal/event"
 	"todoe/internal/messaging"
+	pb "todoe/onboarding"
 )
 
 func main() {
@@ -43,6 +46,10 @@ func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3002"
+	}
+	grpcPort := os.Getenv("GRPC_PORT")
+	if grpcPort == "" {
+		grpcPort = "50051"
 	}
 
 	clientIO := mo.NewIOEither(func() (*mongo.Client, error) {
@@ -99,6 +106,20 @@ func main() {
 			slog.Error("onboarding: record credit score", "err", r.Error())
 		}
 	})
+
+	// ── gRPC server ──────────────────────────────────────────────────────
+	go func() {
+		lis, err := net.Listen("tcp", ":"+grpcPort)
+		if err != nil {
+			log.Fatal("onboarding: grpc listen:", err)
+		}
+		srv := grpc.NewServer()
+		pb.RegisterOnboardingServiceServer(srv, &userGRPCServer{repo: userRepo})
+		slog.Info("onboarding gRPC server starting", "port", grpcPort)
+		if err := srv.Serve(lis); err != nil {
+			log.Fatal("onboarding: grpc serve:", err)
+		}
+	}()
 
 	// ── HTTP ─────────────────────────────────────────────────────────────
 	app := fiber.New()

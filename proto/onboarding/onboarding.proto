@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package onboarding;
+
+option go_package = "todoe/gen/onboarding";
+
+// OnboardingService lets other services query user information by ID.
+// Used by the auth service when it receives a user.activated notification.
+service OnboardingService {
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+}
+
+message GetUserRequest {
+  string user_id = 1;
+}
+
+message GetUserResponse {
+  string user_id = 1;
+  string email   = 2;
+  string name    = 3;
+}

@@ -13,6 +13,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	healthadapter "todoe/internal/health/adapter"
 	healthhttp "todoe/internal/health/adapter/http"
@@ -30,6 +32,7 @@ import (
 
 	"todoe/internal/event"
 	"todoe/internal/messaging"
+	pb "todoe/onboarding"
 )
 
 func main() {
@@ -45,6 +48,17 @@ func main() {
 	if dbName == "" {
 		dbName = "todoe"
 	}
+	onboardingAddr := os.Getenv("ONBOARDING_GRPC_ADDR")
+	if onboardingAddr == "" {
+		onboardingAddr = "localhost:50051"
+	}
+
+	conn, err := grpc.NewClient(onboardingAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatal("api: grpc dial onboarding:", err)
+	}
+	defer conn.Close()
+	onboardingClient := pb.NewOnboardingServiceClient(conn)
 
 	clientIO := mo.NewIOEither(func() (*mongo.Client, error) {
 		return mongo.Connect(options.Client().ApplyURI(mongoURI))
@@ -83,7 +97,7 @@ func main() {
 	authenService := authenapp.NewService(authenRepo, authenBus)
 	authenHandler := authenhttp.NewHandler(authenService)
 
-	// user.activated (NATS) → create auth credential for the newly onboarded user
+	// user.activated (NATS notification) → fetch full user via gRPC → create auth credential
 	nc.Subscribe(messaging.UserSubject, func(m *nats.Msg) {
 		var msg messaging.Message
 		if err := json.Unmarshal(m.Data, &msg); err != nil {
@@ -95,8 +109,6 @@ func main() {
 		}
 		var p struct {
 			UserID string `json:"user_id"`
-			Email  string `json:"email"`
-			Name   string `json:"name"`
 		}
 		if err := json.Unmarshal(msg.Payload, &p); err != nil {
 			slog.Error("api: user.activated unmarshal", "err", err)
@@ -107,7 +119,12 @@ func main() {
 			slog.Error("api: user.activated invalid user id", "err", err)
 			return
 		}
-		if r := authenService.ActivateUser(context.Background(), id, p.Email, p.Name); r.IsError() {
+		resp, err := onboardingClient.GetUser(context.Background(), &pb.GetUserRequest{UserId: p.UserID})
+		if err != nil {
+			slog.Error("api: user.activated grpc GetUser failed", "err", err)
+			return
+		}
+		if r := authenService.ActivateUser(context.Background(), id, resp.Email, resp.Name); r.IsError() {
 			slog.Error("api: user.activated credential creation failed", "err", r.Error())
 		}
 	})
