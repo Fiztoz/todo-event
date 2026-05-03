@@ -45,9 +45,22 @@ Distributed task management system demonstrating:
 | `cmd/audit` | — | — | Event log to Loki |
 | `cmd/welcome` | — | — | Onboarding step logger |
 
-### Onboarding → Auth handoff
+### Onboarding → Auth handoff (Event Notification + gRPC Callback)
 
-When a user completes onboarding, `cmd/onboarding` emits `user.activated` on NATS. `cmd/api` subscribes and automatically creates a bcrypt credential — the generated temp password is logged to stdout.
+When a user completes onboarding, `cmd/onboarding` emits `user.activated` on NATS carrying **only the user ID** (event notification pattern — no data in the payload). `cmd/api` receives the notification and calls back to the onboarding gRPC server (`GetUser`) to fetch the email and name, then creates a bcrypt credential. The generated temp password is logged to stdout.
+
+```
+cmd/onboarding                NATS                    cmd/api
+CompleteProfile() ──► user.activated {user_id} ──► handler
+                                                      │
+                                                      ▼ gRPC: GetUser(user_id)
+                                              cmd/onboarding :50051
+                                                      │
+                                                      ▼
+                                              ActivateUser(id, email, name)
+```
+
+This keeps events thin and avoids data coupling — consumers decide what they need and fetch it.
 
 ---
 
@@ -75,6 +88,8 @@ All have local defaults — no `.env` required for development.
 | `NATS_URL` | `nats://127.0.0.1:4222` | all services |
 | `DB_NAME` | `todoe` (api) / `todoe_onboarding` (onboarding) | api, onboarding |
 | `PORT` | `3000` (api) / `3002` (onboarding) | api, onboarding |
+| `GRPC_PORT` | `50051` | onboarding (gRPC server) |
+| `ONBOARDING_GRPC_ADDR` | `localhost:50051` | api (gRPC client) |
 | `LOKI_URL` | `http://localhost:3100` | audit |
 
 ## Start Infrastructure
@@ -104,7 +119,7 @@ cd web/vue && bun run dev        # tasks UI  → http://localhost:5173
 cd web/onboarding && bun run dev # onboarding UI → http://localhost:5174
 ```
 
-Both proxy `/api` to `http://localhost:3000`. The onboarding UI proxies `/api` to `:3000` as well — register/verify calls should target `:3002` directly or adjust the proxy.
+The tasks UI proxies `/api` to `:3000`. The onboarding UI proxies `/api` to `:3002`.
 
 ## End-to-End Flow
 
