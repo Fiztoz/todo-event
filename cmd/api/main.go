@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -29,35 +28,9 @@ import (
 	taskapplication "todoe/domain/task/application"
 	taskdomain "todoe/domain/task/domain"
 
-	useradapter "todoe/domain/user/adapter"
-	userhttp "todoe/domain/user/adapter/http"
-	userapplication "todoe/domain/user/application"
-	userdomain "todoe/domain/user/domain"
-
 	"todoe/internal/event"
 	"todoe/internal/messaging"
 )
-
-type natsPublisher struct {
-	conn    *nats.Conn
-	subject string
-}
-
-func (p *natsPublisher) Publish(_ context.Context, e event.Event) {
-	payload, _ := json.Marshal(e.Payload)
-	data, _ := json.Marshal(messaging.Message{Type: e.Type, Payload: payload})
-	if err := p.conn.Publish(p.subject, data); err != nil {
-		slog.Error("nats: publish error", "subject", p.subject, "err", err)
-	}
-}
-
-type multiPublisher struct{ publishers []event.Publisher }
-
-func (m *multiPublisher) Publish(ctx context.Context, e event.Event) {
-	for _, p := range m.publishers {
-		p.Publish(ctx, e)
-	}
-}
 
 func main() {
 	mongoURI := os.Getenv("MONGO_URI")
@@ -67,6 +40,10 @@ func main() {
 	natsURL := os.Getenv("NATS_URL")
 	if natsURL == "" {
 		natsURL = nats.DefaultURL
+	}
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		dbName = "todoe"
 	}
 
 	clientIO := mo.NewIOEither(func() (*mongo.Client, error) {
@@ -86,82 +63,52 @@ func main() {
 
 	// ── Task domain ──────────────────────────────────────────────────────
 	taskBus := event.NewEventBus()
-	taskRepo := taskadapter.NewMongoRepository(clientIO)
+	taskRepo := taskadapter.NewMongoRepository(clientIO, dbName)
 	taskProjection := taskadapter.NewProjectionHandler(taskRepo)
 	taskBus.Subscribe(taskdomain.EventCreated, taskProjection)
 	taskBus.Subscribe(taskdomain.EventStatusChanged, taskProjection)
-	taskPublisher := &multiPublisher{publishers: []event.Publisher{
+	taskPublisher := &messaging.MultiPublisher{Publishers: []event.Publisher{
 		taskBus,
-		&natsPublisher{nc, messaging.TaskSubject},
+		&messaging.NatsPublisher{Conn: nc, Subject: messaging.TaskSubject},
 	}}
 	taskService := taskapplication.NewService(taskRepo, taskPublisher)
 	taskHandler := taskhttp.NewHandler(taskService)
 
-	// ── User domain ──────────────────────────────────────────────────────
-	userBus := event.NewEventBus()
-	userRepo := useradapter.NewMongoRepository(clientIO)
-	userProjection := useradapter.NewProjectionHandler(userRepo)
-	userBus.Subscribe(userdomain.EventRegistered, userProjection)
-	userBus.Subscribe(userdomain.EventEmailVerified, userProjection)
-	userBus.Subscribe(userdomain.EventCreditScored, userProjection)
-	userBus.Subscribe(userdomain.EventProfileCompleted, userProjection)
-	userPublisher := &multiPublisher{publishers: []event.Publisher{
-		userBus,
-		&natsPublisher{nc, messaging.UserSubject},
-	}}
-	userService := userapplication.NewService(userRepo, userPublisher)
-	userHandler := userhttp.NewHandler(userService)
-
 	// ── Authen domain ────────────────────────────────────────────────────
 	authenBus := event.NewEventBus()
-	authenRepo := authenAdapter.NewMongoRepository(clientIO)
+	authenRepo := authenAdapter.NewMongoRepository(clientIO, dbName)
 	authenProjection := authenAdapter.NewProjectionHandler(authenRepo)
 	authenBus.Subscribe(authendomain.EventLoggedIn, authenProjection)
 	authenBus.Subscribe(authendomain.EventLoggedOut, authenProjection)
 	authenService := authenapp.NewService(authenRepo, authenBus)
 	authenHandler := authenhttp.NewHandler(authenService)
 
-	// user.activated → create auth credential for the newly onboarded user
-	userBus.Subscribe(userdomain.EventUserActivated, func(ctx context.Context, e event.Event) error {
-		p, ok := e.Payload.(userdomain.UserActivatedPayload)
-		if !ok {
-			slog.Error("api: user.activated unexpected payload", "type", fmt.Sprintf("%T", e.Payload))
-			return nil
-		}
-		userID, err := bson.ObjectIDFromHex(p.UserID)
-		if err != nil {
-			slog.Error("api: user.activated invalid user id", "err", err)
-			return nil
-		}
-		if r := authenService.ActivateUser(ctx, userID, p.Email, p.Name); r.IsError() {
-			slog.Error("api: user.activated credential creation failed", "err", r.Error())
-		}
-		return nil
-	})
-
-	// ── Credit result loop-back ──────────────────────────────────────────
-	// cmd/credit publishes credit.results → api calls RecordCreditScore
-	nc.Subscribe(messaging.CreditResultSubject, func(m *nats.Msg) {
+	// user.activated (NATS) → create auth credential for the newly onboarded user
+	nc.Subscribe(messaging.UserSubject, func(m *nats.Msg) {
 		var msg messaging.Message
 		if err := json.Unmarshal(m.Data, &msg); err != nil {
-			slog.Error("api: credit result unmarshal", "err", err)
+			slog.Error("api: user event unmarshal", "err", err)
 			return
 		}
-		if msg.Type != userdomain.EventCreditScored {
+		if msg.Type != "user.activated" {
 			return
 		}
-		var p userdomain.CreditScoredPayload
+		var p struct {
+			UserID string `json:"user_id"`
+			Email  string `json:"email"`
+			Name   string `json:"name"`
+		}
 		if err := json.Unmarshal(msg.Payload, &p); err != nil {
-			slog.Error("api: credit scored unmarshal", "err", err)
+			slog.Error("api: user.activated unmarshal", "err", err)
 			return
 		}
 		id, err := bson.ObjectIDFromHex(p.UserID)
 		if err != nil {
-			slog.Error("api: invalid user id in credit result", "err", err)
+			slog.Error("api: user.activated invalid user id", "err", err)
 			return
 		}
-		if r := userService.RecordCreditScore(context.Background(), id, p.Score, p.Approved); r.IsError() {
-			slog.Error("api: record credit score", "err", r.Error())
+		if r := authenService.ActivateUser(context.Background(), id, p.Email, p.Name); r.IsError() {
+			slog.Error("api: user.activated credential creation failed", "err", r.Error())
 		}
 	})
 
@@ -190,10 +137,6 @@ func main() {
 	tasks.Get("/:id", taskHandler.Detail)
 	tasks.Patch("/:id/status", taskHandler.ChangeStatus)
 
-	app.Post("/users/register", userHandler.Register)
-	app.Get("/users/:id", userHandler.GetUser)
-	app.Post("/users/:id/verify-email", userHandler.VerifyEmail)
-	app.Post("/users/:id/complete-profile", userHandler.CompleteProfile)
-
+	slog.Info("api service starting", "port", 3000, "db", dbName)
 	log.Fatal(app.Listen(":3000"))
 }

@@ -24,13 +24,14 @@ type StoredEvent struct {
 
 type MongoRepository struct {
 	clientIO    mo.IOEither[*mongo.Client]
+	dbName      string
 	once        sync.Once
 	cached      mo.Either[error, *mongo.Client]
 	initialized atomic.Bool
 }
 
-func NewMongoRepository(clientIO mo.IOEither[*mongo.Client]) *MongoRepository {
-	return &MongoRepository{clientIO: clientIO}
+func NewMongoRepository(clientIO mo.IOEither[*mongo.Client], dbName string) *MongoRepository {
+	return &MongoRepository{clientIO: clientIO, dbName: dbName}
 }
 
 func (r *MongoRepository) getClient() mo.Either[error, *mongo.Client] {
@@ -46,7 +47,7 @@ func (r *MongoRepository) db() (*mongo.Database, error) {
 	if either.IsLeft() {
 		return nil, either.MustLeft()
 	}
-	return either.MustRight().Database("todoe"), nil
+	return either.MustRight().Database(r.dbName), nil
 }
 
 func (r *MongoRepository) Append(ctx context.Context, aggregateID bson.ObjectID, eventType string, payload any) mo.Result[struct{}] {

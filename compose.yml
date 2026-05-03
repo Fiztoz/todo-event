@@ -19,6 +19,25 @@ services:
     ports:
       - "4222:4222"
 
+  onboarding:
+    image: golang:1.25-alpine
+    container_name: todoe-onboarding
+    working_dir: /app
+    volumes:
+      - .:/app
+      - go-cache:/root/go/pkg/mod
+    command: go run ./cmd/onboarding
+    ports:
+      - "3002:3002"
+    environment:
+      MONGO_URI: mongodb://root:root@mongo:27017
+      NATS_URL: nats://nats:4222
+      DB_NAME: todoe_onboarding
+      PORT: "3002"
+    depends_on:
+      - mongo
+      - nats
+
   loki:
     image: grafana/loki:latest
     container_name: todoe-loki
@@ -45,3 +64,4 @@ services:
 volumes:
   mongo-data:
   grafana-data:
+  go-cache:
