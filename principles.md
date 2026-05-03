@@ -49,7 +49,7 @@ internal/            — Reserved for infrastructure that must not be imported e
 - Side Effect function must not return multiple value like (value, err) it must be wrapped with Result, Option or Either.
 
 ## Back End
-- Modular Monolith — each domain lives under `domain/<name>/`
+- Microservices
 - NO shared services between domains
 - Self Contain API, Repository and Model within domain
 - `samber/mo` for Result/Option/Either types
