@@ -9,7 +9,6 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/nats-io/nats.go"
 	"github.com/samber/mo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -38,19 +37,6 @@ import (
 	"todoe/internal/messaging"
 )
 
-type natsPublisher struct {
-	conn    *nats.Conn
-	subject string
-}
-
-func (p *natsPublisher) Publish(_ context.Context, e event.Event) {
-	payload, _ := json.Marshal(e.Payload)
-	data, _ := json.Marshal(messaging.Message{Type: e.Type, Payload: payload})
-	if err := p.conn.Publish(p.subject, data); err != nil {
-		slog.Error("nats: publish error", "subject", p.subject, "err", err)
-	}
-}
-
 type multiPublisher struct{ publishers []event.Publisher }
 
 func (m *multiPublisher) Publish(ctx context.Context, e event.Event) {
@@ -64,9 +50,9 @@ func main() {
 	if mongoURI == "" {
 		mongoURI = "mongodb://root:root@localhost:27017"
 	}
-	natsURL := os.Getenv("NATS_URL")
-	if natsURL == "" {
-		natsURL = nats.DefaultURL
+	amqpURL := os.Getenv("AMQP_URL")
+	if amqpURL == "" {
+		amqpURL = "amqp://guest:guest@localhost:5672/"
 	}
 
 	clientIO := mo.NewIOEither(func() (*mongo.Client, error) {
@@ -78,11 +64,20 @@ func main() {
 	healthService := healthapp.NewService(healthRepo)
 	healthHandler := healthhttp.NewHandler(healthService)
 
-	nc, err := nats.Connect(natsURL)
+	conn, ch, err := messaging.Connect(amqpURL)
 	if err != nil {
-		log.Fatal("nats:", err)
+		log.Fatal("rabbit:", err)
 	}
-	defer nc.Drain()
+	defer conn.Close()
+
+	if err := messaging.DeclareTopology(ch, []messaging.Binding{
+		{Exchange: messaging.TaskExchange, Queue: messaging.QueueAuditTaskEvents},
+		{Exchange: messaging.UserExchange, Queue: messaging.QueueWelcomeUserEvents},
+		{Exchange: messaging.UserExchange, Queue: messaging.QueueCreditUserEvents},
+		{Exchange: messaging.CreditResultExchange, Queue: messaging.QueueAPICreditResults},
+	}); err != nil {
+		log.Fatal("rabbit topology:", err)
+	}
 
 	// ── Task domain ──────────────────────────────────────────────────────
 	taskBus := event.NewEventBus()
@@ -92,7 +87,7 @@ func main() {
 	taskBus.Subscribe(taskdomain.EventStatusChanged, taskProjection)
 	taskPublisher := &multiPublisher{publishers: []event.Publisher{
 		taskBus,
-		&natsPublisher{nc, messaging.TaskSubject},
+		messaging.NewPublisher(ch, messaging.TaskExchange),
 	}}
 	taskService := taskapplication.NewService(taskRepo, taskPublisher)
 	taskHandler := taskhttp.NewHandler(taskService)
@@ -107,7 +102,7 @@ func main() {
 	userBus.Subscribe(userdomain.EventProfileCompleted, userProjection)
 	userPublisher := &multiPublisher{publishers: []event.Publisher{
 		userBus,
-		&natsPublisher{nc, messaging.UserSubject},
+		messaging.NewPublisher(ch, messaging.UserExchange),
 	}}
 	userService := userapplication.NewService(userRepo, userPublisher)
 	userHandler := userhttp.NewHandler(userService)
@@ -121,7 +116,8 @@ func main() {
 	authenService := authenapp.NewService(authenRepo, authenBus)
 	authenHandler := authenhttp.NewHandler(authenService)
 
-	// user.activated → create auth credential for the newly onboarded user
+	//user.activated → create auth credential for the newly onboarded user
+	//subsribe domain events directly from internal bus since this is a same-process integration
 	userBus.Subscribe(userdomain.EventUserActivated, func(ctx context.Context, e event.Event) error {
 		p, ok := e.Payload.(userdomain.UserActivatedPayload)
 		if !ok {
@@ -141,12 +137,7 @@ func main() {
 
 	// ── Credit result loop-back ──────────────────────────────────────────
 	// cmd/credit publishes credit.results → api calls RecordCreditScore
-	nc.Subscribe(messaging.CreditResultSubject, func(m *nats.Msg) {
-		var msg messaging.Message
-		if err := json.Unmarshal(m.Data, &msg); err != nil {
-			slog.Error("api: credit result unmarshal", "err", err)
-			return
-		}
+	if err := messaging.Subscribe(ch, messaging.CreditResultExchange, messaging.QueueAPICreditResults, func(msg messaging.Message) {
 		if msg.Type != userdomain.EventCreditScored {
 			return
 		}
@@ -163,7 +154,9 @@ func main() {
 		if r := userService.RecordCreditScore(context.Background(), id, p.Score, p.Approved); r.IsError() {
 			slog.Error("api: record credit score", "err", r.Error())
 		}
-	})
+	}); err != nil {
+		log.Fatal("rabbit subscribe credit.results:", err)
+	}
 
 	// ── HTTP ─────────────────────────────────────────────────────────────
 	authMiddleware := func(c *fiber.Ctx) error {

@@ -8,31 +8,23 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/nats-io/nats.go"
-
 	userdomain "todoe/domain/user/domain"
 	"todoe/internal/messaging"
 )
 
 func main() {
-	natsURL := os.Getenv("NATS_URL")
-	if natsURL == "" {
-		natsURL = nats.DefaultURL
+	amqpURL := os.Getenv("AMQP_URL")
+	if amqpURL == "" {
+		amqpURL = "amqp://guest:guest@localhost:5672/"
 	}
 
-	nc, err := nats.Connect(natsURL)
+	conn, ch, err := messaging.Connect(amqpURL)
 	if err != nil {
-		log.Fatal("nats:", err)
+		log.Fatal("rabbit:", err)
 	}
-	defer nc.Drain()
+	defer conn.Close()
 
-	nc.Subscribe(messaging.UserSubject, func(m *nats.Msg) {
-		var msg messaging.Message
-		if err := json.Unmarshal(m.Data, &msg); err != nil {
-			slog.Error("welcome: unmarshal", "err", err)
-			return
-		}
-
+	if err := messaging.Subscribe(ch, messaging.UserExchange, messaging.QueueWelcomeUserEvents, func(msg messaging.Message) {
 		switch msg.Type {
 		case userdomain.EventRegistered:
 			var user userdomain.User
@@ -63,9 +55,11 @@ func main() {
 			slog.Info("step 4/4: onboarding complete — welcome!",
 				"name", user.Name, "bio", user.Bio)
 		}
-	})
+	}); err != nil {
+		log.Fatal("rabbit subscribe:", err)
+	}
 
-	slog.Info("welcome service listening", "subject", messaging.UserSubject)
+	slog.Info("welcome service listening", "exchange", messaging.UserExchange)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit

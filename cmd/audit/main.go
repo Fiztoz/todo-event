@@ -12,8 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nats-io/nats.go"
-
 	"todoe/internal/messaging"
 )
 
@@ -48,34 +46,31 @@ func pushToLoki(lokiURL, eventType string, payload json.RawMessage) error {
 }
 
 func main() {
-	natsURL := os.Getenv("NATS_URL")
-	if natsURL == "" {
-		natsURL = nats.DefaultURL
+	amqpURL := os.Getenv("AMQP_URL")
+	if amqpURL == "" {
+		amqpURL = "amqp://guest:guest@localhost:5672/"
 	}
 	lokiURL := os.Getenv("LOKI_URL")
 	if lokiURL == "" {
 		lokiURL = "http://localhost:3100"
 	}
 
-	nc, err := nats.Connect(natsURL)
+	conn, ch, err := messaging.Connect(amqpURL)
 	if err != nil {
-		log.Fatal("nats:", err)
+		log.Fatal("rabbit:", err)
 	}
-	defer nc.Drain()
+	defer conn.Close()
 
-	nc.Subscribe(messaging.TaskSubject, func(m *nats.Msg) {
-		var msg messaging.Message
-		if err := json.Unmarshal(m.Data, &msg); err != nil {
-			slog.Error("audit: unmarshal", "err", err)
-			return
-		}
+	if err := messaging.Subscribe(ch, messaging.TaskExchange, messaging.QueueAuditTaskEvents, func(msg messaging.Message) {
 		slog.Info("audit: received event", "type", msg.Type)
 		if err := pushToLoki(lokiURL, msg.Type, msg.Payload); err != nil {
 			slog.Error("audit: loki push", "err", err)
 		}
-	})
+	}); err != nil {
+		log.Fatal("rabbit subscribe:", err)
+	}
 
-	slog.Info("audit service listening", "subject", messaging.TaskSubject)
+	slog.Info("audit service listening", "exchange", messaging.TaskExchange)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit

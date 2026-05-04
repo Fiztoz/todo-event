@@ -12,12 +12,20 @@ services:
     volumes:
       - mongo-data:/data/db
 
-  nats:
-    image: nats:latest
-    container_name: todoe-nats
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: todoe-rabbitmq
     restart: unless-stopped
     ports:
-      - "4222:4222"
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbit-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   loki:
     image: grafana/loki:latest
@@ -45,3 +53,4 @@ services:
 volumes:
   mongo-data:
   grafana-data:
+  rabbit-data:

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"hash/fnv"
 	"log"
@@ -9,9 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/nats-io/nats.go"
-
 	userdomain "todoe/domain/user/domain"
+	"todoe/internal/event"
 	"todoe/internal/messaging"
 )
 
@@ -25,23 +25,23 @@ func fakeCreditAPI(email string) (score int, approved bool) {
 }
 
 func main() {
-	natsURL := os.Getenv("NATS_URL")
-	if natsURL == "" {
-		natsURL = nats.DefaultURL
+	amqpURL := os.Getenv("AMQP_URL")
+	if amqpURL == "" {
+		amqpURL = "amqp://guest:guest@localhost:5672/"
 	}
 
-	nc, err := nats.Connect(natsURL)
+	conn, ch, err := messaging.Connect(amqpURL)
 	if err != nil {
-		log.Fatal("nats:", err)
+		log.Fatal("rabbit:", err)
 	}
-	defer nc.Drain()
+	defer conn.Close()
 
-	nc.Subscribe(messaging.UserSubject, func(m *nats.Msg) {
-		var msg messaging.Message
-		if err := json.Unmarshal(m.Data, &msg); err != nil {
-			slog.Error("credit: unmarshal", "err", err)
-			return
-		}
+	if err := messaging.DeclareExchange(ch, messaging.CreditResultExchange); err != nil {
+		log.Fatal("rabbit declare:", err)
+	}
+	resultPublisher := messaging.NewPublisher(ch, messaging.CreditResultExchange)
+
+	if err := messaging.Subscribe(ch, messaging.UserExchange, messaging.QueueCreditUserEvents, func(msg messaging.Message) {
 		if msg.Type != userdomain.EventEmailVerified {
 			return
 		}
@@ -55,21 +55,19 @@ func main() {
 		score, approved := fakeCreditAPI(user.Email)
 		slog.Info("credit: scored", "user_id", user.ID.Hex(), "email", user.Email, "score", score, "approved", approved)
 
-		payload, _ := json.Marshal(userdomain.CreditScoredPayload{
-			UserID:   user.ID.Hex(),
-			Score:    score,
-			Approved: approved,
+		resultPublisher.Publish(context.Background(), event.Event{
+			Type: userdomain.EventCreditScored,
+			Payload: userdomain.CreditScoredPayload{
+				UserID:   user.ID.Hex(),
+				Score:    score,
+				Approved: approved,
+			},
 		})
-		data, _ := json.Marshal(messaging.Message{
-			Type:    userdomain.EventCreditScored,
-			Payload: payload,
-		})
-		if err := nc.Publish(messaging.CreditResultSubject, data); err != nil {
-			slog.Error("credit: publish result", "err", err)
-		}
-	})
+	}); err != nil {
+		log.Fatal("rabbit subscribe:", err)
+	}
 
-	slog.Info("credit service listening", "subject", messaging.UserSubject)
+	slog.Info("credit service listening", "exchange", messaging.UserExchange)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
