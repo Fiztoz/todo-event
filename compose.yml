@@ -27,6 +27,25 @@ services:
       timeout: 5s
       retries: 5
 
+  mysql:
+    image: mysql:8
+    container_name: todoe-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: todoe_onboarding
+      MYSQL_USER: todoe
+      MYSQL_PASSWORD: todoe
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   loki:
     image: grafana/loki:latest
     container_name: todoe-loki
@@ -54,3 +73,4 @@ volumes:
   mongo-data:
   grafana-data:
   rabbit-data:
+  mysql-data:

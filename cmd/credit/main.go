@@ -53,12 +53,12 @@ func main() {
 		}
 
 		score, approved := fakeCreditAPI(user.Email)
-		slog.Info("credit: scored", "user_id", user.ID.Hex(), "email", user.Email, "score", score, "approved", approved)
+		slog.Info("credit: scored", "user_id", user.ID, "email", user.Email, "score", score, "approved", approved)
 
 		resultPublisher.Publish(context.Background(), event.Event{
 			Type: userdomain.EventCreditScored,
 			Payload: userdomain.CreditScoredPayload{
-				UserID:   user.ID.Hex(),
+				UserID:   user.ID,
 				Score:    score,
 				Approved: approved,
 			},

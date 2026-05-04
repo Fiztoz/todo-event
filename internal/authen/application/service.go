@@ -55,7 +55,7 @@ func (s *Service) RegisterCredential(ctx context.Context, email, password string
 	return mo.Ok(cred)
 }
 
-func (s *Service) ActivateUser(ctx context.Context, userID bson.ObjectID, email, name string) mo.Result[domain.Credential] {
+func (s *Service) ActivateUser(ctx context.Context, userID, email, name string) mo.Result[domain.Credential] {
 	tempPassword := bson.NewObjectID().Hex()
 	hash, err := bcrypt.GenerateFromPassword([]byte(tempPassword), bcrypt.DefaultCost)
 	if err != nil {

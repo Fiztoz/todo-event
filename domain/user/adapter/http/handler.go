@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"todoe/domain/user/application"
 	"todoe/domain/user/port"
@@ -37,9 +36,9 @@ func (h *Handler) Register(c *fiber.Ctx) error {
 }
 
 func (h *Handler) VerifyEmail(c *fiber.Ctx) error {
-	id, err := bson.ObjectIDFromHex(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid id"})
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing id"})
 	}
 	var body struct {
 		Token string `json:"token"`
@@ -58,9 +57,9 @@ func (h *Handler) VerifyEmail(c *fiber.Ctx) error {
 }
 
 func (h *Handler) GetUser(c *fiber.Ctx) error {
-	id, err := bson.ObjectIDFromHex(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid id"})
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing id"})
 	}
 	result := h.useCase.GetUser(c.Context(), id)
 	if result.IsError() {
@@ -70,9 +69,9 @@ func (h *Handler) GetUser(c *fiber.Ctx) error {
 }
 
 func (h *Handler) CompleteProfile(c *fiber.Ctx) error {
-	id, err := bson.ObjectIDFromHex(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid id"})
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing id"})
 	}
 	var body struct {
 		Bio string `json:"bio"`

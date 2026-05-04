@@ -7,11 +7,9 @@ import (
 	"log/slog"
 	"os"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/gofiber/fiber/v2"
-	"github.com/samber/mo"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"github.com/jmoiron/sqlx"
 
 	useradapter "todoe/domain/user/adapter"
 	userhttp "todoe/domain/user/adapter/http"
@@ -31,18 +29,20 @@ func (m *multiPublisher) Publish(ctx context.Context, e event.Event) {
 }
 
 func main() {
-	mongoURI := os.Getenv("MONGO_URI")
-	if mongoURI == "" {
-		mongoURI = "mongodb://root:root@localhost:27017"
+	mysqlDSN := os.Getenv("MYSQL_DSN")
+	if mysqlDSN == "" {
+		mysqlDSN = "todoe:todoe@tcp(localhost:3306)/todoe_onboarding?parseTime=true&multiStatements=true"
 	}
 	amqpURL := os.Getenv("AMQP_URL")
 	if amqpURL == "" {
 		amqpURL = "amqp://guest:guest@localhost:5672/"
 	}
 
-	clientIO := mo.NewIOEither(func() (*mongo.Client, error) {
-		return mongo.Connect(options.Client().ApplyURI(mongoURI))
-	})
+	db, err := sqlx.ConnectContext(context.Background(), "mysql", mysqlDSN)
+	if err != nil {
+		log.Fatal("mysql:", err)
+	}
+	defer db.Close()
 
 	conn, ch, err := messaging.Connect(amqpURL)
 	if err != nil {
@@ -59,8 +59,12 @@ func main() {
 		log.Fatal("rabbit topology:", err)
 	}
 
+	if err := useradapter.Migrate(db); err != nil {
+		log.Fatal("mysql migrate:", err)
+	}
+	userRepo := useradapter.NewMySQLRepository(db)
+
 	userBus := event.NewEventBus()
-	userRepo := useradapter.NewMongoRepository(clientIO)
 	userProjection := useradapter.NewProjectionHandler(userRepo)
 	userBus.Subscribe(userdomain.EventRegistered, userProjection)
 	userBus.Subscribe(userdomain.EventEmailVerified, userProjection)
@@ -73,6 +77,7 @@ func main() {
 	userService := userapplication.NewService(userRepo, userPublisher)
 	userHandler := userhttp.NewHandler(userService)
 
+	// Subscribe to credit scoring results to update user credit status
 	if err := messaging.Subscribe(ch, messaging.CreditResultExchange, messaging.QueueOnboardingCreditResults, func(msg messaging.Message) {
 		if msg.Type != userdomain.EventCreditScored {
 			return
@@ -82,18 +87,14 @@ func main() {
 			slog.Error("onboarding: credit scored unmarshal", "err", err)
 			return
 		}
-		id, err := bson.ObjectIDFromHex(p.UserID)
-		if err != nil {
-			slog.Error("onboarding: invalid user id in credit result", "err", err)
-			return
-		}
-		if r := userService.RecordCreditScore(context.Background(), id, p.Score, p.Approved); r.IsError() {
+		if r := userService.RecordCreditScore(context.Background(), p.UserID, p.Score, p.Approved); r.IsError() {
 			slog.Error("onboarding: record credit score", "err", r.Error())
 		}
 	}); err != nil {
 		log.Fatal("rabbit subscribe credit.results:", err)
 	}
 
+	// Route credit scoring results to welcome email if approved
 	app := fiber.New()
 	app.Post("/users/register", userHandler.Register)
 	app.Get("/users/:id", userHandler.GetUser)

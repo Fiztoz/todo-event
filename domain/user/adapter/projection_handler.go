@@ -8,7 +8,7 @@ import (
 	"todoe/internal/event"
 )
 
-func NewProjectionHandler(repo *MongoRepository) func(context.Context, event.Event) error {
+func NewProjectionHandler(repo *MySQLRepository) func(context.Context, event.Event) error {
 	return func(ctx context.Context, e event.Event) error {
 		user, ok := e.Payload.(domain.User)
 		if !ok {

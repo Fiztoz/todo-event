@@ -9,7 +9,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/samber/mo"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
@@ -104,12 +103,7 @@ func main() {
 			slog.Error("api: user.activated unmarshal", "err", err)
 			return
 		}
-		userID, err := bson.ObjectIDFromHex(p.UserID)
-		if err != nil {
-			slog.Error("api: user.activated invalid user id", "err", err)
-			return
-		}
-		if r := authenService.ActivateUser(context.Background(), userID, p.Email, p.Name); r.IsError() {
+		if r := authenService.ActivateUser(context.Background(), p.UserID, p.Email, p.Name); r.IsError() {
 			slog.Error("api: user.activated credential creation failed", "err", r.Error())
 		}
 	}); err != nil {

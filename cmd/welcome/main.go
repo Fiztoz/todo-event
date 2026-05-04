@@ -36,7 +36,7 @@ func main() {
 			var user userdomain.User
 			json.Unmarshal(msg.Payload, &user)
 			slog.Info("step 2/4: email confirmed — running credit check...",
-				"user_id", user.ID.Hex())
+				"user_id", user.ID)
 
 		case userdomain.EventCreditScored:
 			var user userdomain.User
