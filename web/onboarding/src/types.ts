@@ -15,3 +15,9 @@ export interface User {
   credit_approved: boolean
   created_at: string
 }
+
+export interface Captcha {
+  id: string
+  question: string
+  expires_at: string
+}

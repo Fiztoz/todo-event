@@ -1,6 +1,7 @@
-import type { User } from './types.ts'
+import type { Captcha, User } from './types.ts'
 
 const BASE = '/api'
+const CAPTCHA_BASE = '/captcha'
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -35,5 +36,17 @@ export async function completeProfile(id: string, bio: string): Promise<User> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ bio }),
+  }))
+}
+
+export async function issueCaptcha(): Promise<Captcha> {
+  return handle(await fetch(CAPTCHA_BASE, { method: 'POST' }))
+}
+
+export async function verifyCaptcha(id: string, answer: number): Promise<void> {
+  await handle<{ verified: boolean }>(await fetch(`${CAPTCHA_BASE}/${id}/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answer }),
   }))
 }

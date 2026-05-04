@@ -18,6 +18,8 @@
 
     <StepRegister v-if="!user" @done="user = $event" />
 
+    <StepCaptcha v-else-if="user.status === 'registered' && !captchaPassed" @done="captchaPassed = true" />
+
     <StepVerifyEmail v-else-if="user.status === 'registered'" :user="user" @done="user = $event" />
 
     <StepCreditCheck v-else-if="user.status === 'email_verified'" :user="user" @done="user = $event" />
@@ -48,6 +50,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import StepRegister from './components/StepRegister.vue'
+import StepCaptcha from './components/StepCaptcha.vue'
 import StepVerifyEmail from './components/StepVerifyEmail.vue'
 import StepCreditCheck from './components/StepCreditCheck.vue'
 import StepCompleteProfile from './components/StepCompleteProfile.vue'
@@ -55,22 +58,25 @@ import StepDone from './components/StepDone.vue'
 import type { User, UserStatus } from './types.ts'
 
 const user = ref<User | null>(null)
+const captchaPassed = ref(false)
 
 const steps = [
   { n: 1, label: 'Register' },
-  { n: 2, label: 'Verify' },
-  { n: 3, label: 'Credit' },
-  { n: 4, label: 'Profile' },
+  { n: 2, label: 'Captcha' },
+  { n: 3, label: 'Verify' },
+  { n: 4, label: 'Credit' },
+  { n: 5, label: 'Profile' },
 ]
 
 const activeStep = computed((): number => {
   if (!user.value) return 1
+  if (user.value.status === 'registered' && !captchaPassed.value) return 2
   const map: Record<UserStatus, number> = {
-    registered:          2,
-    email_verified:      3,
-    credit_approved:     4,
-    credit_denied:       3,
-    onboarding_complete: 5,
+    registered:          3,
+    email_verified:      4,
+    credit_approved:     5,
+    credit_denied:       4,
+    onboarding_complete: 6,
   }
   return map[user.value.status]
 })
