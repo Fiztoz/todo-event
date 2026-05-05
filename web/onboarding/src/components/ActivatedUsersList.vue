@@ -32,6 +32,7 @@
           <div class="user-edit">
             <input v-model="draft!.name" placeholder="Name" />
             <input v-model="draft!.email" placeholder="Email" type="email" />
+            <textarea v-model="draft!.bio" placeholder="Short profile / bio" rows="3"></textarea>
             <div v-if="editError" class="form-error">{{ editError }}</div>
             <div class="user-actions">
               <button class="btn-primary" :disabled="saving" @click="save(u)">
@@ -58,7 +59,7 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 
 const editingId = ref<string | null>(null)
-const draft = ref<{ name: string; email: string } | null>(null)
+const draft = ref<{ name: string; email: string; bio: string } | null>(null)
 const editError = ref<string | null>(null)
 const saving = ref(false)
 
@@ -76,7 +77,7 @@ async function load() {
 
 function startEdit(u: User) {
   editingId.value = u.id
-  draft.value = { name: u.name, email: u.email }
+  draft.value = { name: u.name, email: u.email, bio: u.bio }
   editError.value = null
 }
 
@@ -91,7 +92,7 @@ async function save(u: User) {
   saving.value = true
   editError.value = null
   try {
-    const updated = await updateContact(u.id, draft.value.name, draft.value.email)
+    const updated = await updateContact(u.id, draft.value.name, draft.value.email, draft.value.bio)
     const i = users.value.findIndex(x => x.id === u.id)
     if (i >= 0) users.value[i] = updated
     cancelEdit()

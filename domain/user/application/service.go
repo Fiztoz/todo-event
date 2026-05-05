@@ -97,7 +97,7 @@ func (s *Service) ListActivatedUsers(ctx context.Context) mo.Result[[]domain.Use
 	return s.repo.FindActivated(ctx)
 }
 
-func (s *Service) UpdateContact(ctx context.Context, id, name, email string) mo.Result[domain.User] {
+func (s *Service) UpdateContact(ctx context.Context, id, name, email, bio string) mo.Result[domain.User] {
 	if name == "" {
 		return mo.Err[domain.User](ErrInvalidName)
 	}
@@ -111,8 +111,8 @@ func (s *Service) UpdateContact(ctx context.Context, id, name, email string) mo.
 	if found := s.repo.FindByEmail(ctx, email); !found.IsError() && found.MustGet().ID != id {
 		return mo.Err[domain.User](ErrEmailTaken)
 	}
-	next := current.MustGet().WithContact(name, email)
-	payload := domain.ContactUpdatedPayload{UserID: id, Name: name, Email: email}
+	next := current.MustGet().WithContact(name, email, bio)
+	payload := domain.ContactUpdatedPayload{UserID: id, Name: name, Email: email, Bio: bio}
 	if r := s.repo.Append(ctx, id, domain.EventContactUpdated, payload); r.IsError() {
 		return mo.Err[domain.User](r.Error())
 	}

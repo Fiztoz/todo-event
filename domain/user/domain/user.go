@@ -64,6 +64,7 @@ type ContactUpdatedPayload struct {
 	UserID string `json:"user_id"`
 	Name   string `json:"name"`
 	Email  string `json:"email"`
+	Bio    string `json:"bio"`
 }
 
 func (u User) WithEmailVerified() User {
@@ -88,8 +89,9 @@ func (u User) WithProfile(bio string) User {
 	return u
 }
 
-func (u User) WithContact(name, email string) User {
+func (u User) WithContact(name, email, bio string) User {
 	u.Name = name
 	u.Email = email
+	u.Bio = bio
 	return u
 }

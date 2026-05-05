@@ -16,7 +16,7 @@ type UseCase interface {
 	CompleteProfile(ctx context.Context, id, bio string) mo.Result[domain.User]
 	GetUser(ctx context.Context, id string) mo.Result[domain.User]
 	ListActivatedUsers(ctx context.Context) mo.Result[[]domain.User]
-	UpdateContact(ctx context.Context, id, name, email string) mo.Result[domain.User]
+	UpdateContact(ctx context.Context, id, name, email, bio string) mo.Result[domain.User]
 }
 
 type Repository interface {

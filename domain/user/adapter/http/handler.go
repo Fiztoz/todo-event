@@ -84,11 +84,12 @@ func (h *Handler) UpdateContact(c *fiber.Ctx) error {
 	var body struct {
 		Name  string `json:"name"`
 		Email string `json:"email"`
+		Bio   string `json:"bio"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	result := h.useCase.UpdateContact(c.Context(), id, body.Name, body.Email)
+	result := h.useCase.UpdateContact(c.Context(), id, body.Name, body.Email, body.Bio)
 	if result.IsError() {
 		switch {
 		case errors.Is(result.Error(), application.ErrInvalidName),

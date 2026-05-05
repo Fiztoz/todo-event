@@ -35,11 +35,11 @@ export async function listActivated(): Promise<User[]> {
   return handle(await fetch(`${BASE}/users/activated`))
 }
 
-export async function updateContact(id: string, name: string, email: string): Promise<User> {
+export async function updateContact(id: string, name: string, email: string, bio: string): Promise<User> {
   return handle(await fetch(`${BASE}/users/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email }),
+    body: JSON.stringify({ name, email, bio }),
   }))
 }
 

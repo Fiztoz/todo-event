@@ -331,9 +331,9 @@ body {
   flex-direction: column;
   gap: 8px;
 }
-.user-edit input {
-  height: 38px;
-  padding: 0 12px;
+.user-edit input,
+.user-edit textarea {
+  padding: 8px 12px;
   border: 1.5px solid var(--border);
   border-radius: var(--radius-sm);
   font-family: inherit;
@@ -341,8 +341,13 @@ body {
   background: #fff;
   outline: none;
   transition: border-color 0.15s;
+  resize: vertical;
+  line-height: 1.5;
 }
-.user-edit input:focus { border-color: var(--blue); }
+.user-edit input  { height: 38px; padding: 0 12px; }
+.user-edit textarea { min-height: 64px; }
+.user-edit input:focus,
+.user-edit textarea:focus { border-color: var(--blue); }
 
 .user-actions {
   display: flex;
