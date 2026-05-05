@@ -15,11 +15,13 @@ type UseCase interface {
 	RecordCreditScore(ctx context.Context, id string, score int, approved bool) mo.Result[domain.User]
 	CompleteProfile(ctx context.Context, id, bio string) mo.Result[domain.User]
 	GetUser(ctx context.Context, id string) mo.Result[domain.User]
+	ListActivatedUsers(ctx context.Context) mo.Result[[]domain.User]
 }
 
 type Repository interface {
 	Append(ctx context.Context, aggregateID, eventType string, payload any) mo.Result[struct{}]
 	FindByID(ctx context.Context, id string) mo.Result[domain.User]
+	FindActivated(ctx context.Context) mo.Result[[]domain.User]
 }
 
 type Publisher interface {

@@ -31,6 +31,10 @@ export async function getUser(id: string): Promise<User> {
   return handle(await fetch(`${BASE}/users/${id}`))
 }
 
+export async function listActivated(): Promise<User[]> {
+  return handle(await fetch(`${BASE}/users/activated`))
+}
+
 export async function completeProfile(id: string, bio: string): Promise<User> {
   return handle(await fetch(`${BASE}/users/${id}/complete-profile`, {
     method: 'POST',

@@ -101,3 +101,16 @@ WHERE id = ?`, id)
 	}
 	return mo.Ok(u)
 }
+
+func (r *MySQLRepository) FindActivated(ctx context.Context) mo.Result[[]domain.User] {
+	users := []domain.User{}
+	err := r.db.SelectContext(ctx, &users, `
+SELECT id, name, email, bio, status, verification_token, credit_score, credit_approved, created_at
+FROM users_view
+WHERE status = ?
+ORDER BY created_at DESC`, string(domain.StatusOnboardingComplete))
+	if err != nil {
+		return mo.Err[[]domain.User](err)
+	}
+	return mo.Ok(users)
+}

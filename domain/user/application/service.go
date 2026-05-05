@@ -92,6 +92,10 @@ func (s *Service) GetUser(ctx context.Context, id string) mo.Result[domain.User]
 	return s.repo.FindByID(ctx, id)
 }
 
+func (s *Service) ListActivatedUsers(ctx context.Context) mo.Result[[]domain.User] {
+	return s.repo.FindActivated(ctx)
+}
+
 func (s *Service) CompleteProfile(ctx context.Context, id, bio string) mo.Result[domain.User] {
 	current := s.repo.FindByID(ctx, id)
 	if current.IsError() {

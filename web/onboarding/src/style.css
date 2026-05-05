@@ -44,6 +44,25 @@ body {
   color: var(--blue);
   letter-spacing: -0.3px;
 }
+.nav-tabs {
+  display: flex;
+  gap: 4px;
+  margin-left: 32px;
+}
+.nav-tabs button {
+  padding: 6px 14px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-tabs button:hover { background: var(--bg); color: var(--text); }
+.nav-tabs button.active { color: var(--blue); background: #E8F0FF; }
 
 /* ── Page ─────────────────────────────────────────── */
 .page {
@@ -248,6 +267,64 @@ body {
   font-size: 1.5rem;
   font-weight: 600;
 }
+
+/* ── Activated users list ────────────────────────── */
+.user-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.user-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  background: var(--bg);
+}
+.user-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 2px;
+}
+.user-email {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.user-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.user-bio {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--text);
+  font-style: italic;
+}
+.empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 28px 0;
+  font-size: 0.875rem;
+}
+.btn-secondary {
+  width: 100%;
+  height: 40px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.btn-secondary:hover:not(:disabled) { background: var(--bg); }
+.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Done screen ─────────────────────────────────── */
 .done-card {

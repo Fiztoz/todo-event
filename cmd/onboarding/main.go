@@ -70,10 +70,12 @@ func main() {
 	userBus.Subscribe(userdomain.EventEmailVerified, userProjection)
 	userBus.Subscribe(userdomain.EventCreditScored, userProjection)
 	userBus.Subscribe(userdomain.EventProfileCompleted, userProjection)
+
 	userPublisher := &multiPublisher{publishers: []event.Publisher{
 		userBus,
 		messaging.NewPublisher(ch, messaging.UserExchange),
 	}}
+
 	userService := userapplication.NewService(userRepo, userPublisher)
 	userHandler := userhttp.NewHandler(userService)
 
@@ -97,6 +99,7 @@ func main() {
 	// Route credit scoring results to welcome email if approved
 	app := fiber.New()
 	app.Post("/users/register", userHandler.Register)
+	app.Get("/users/activated", userHandler.ListActivated)
 	app.Get("/users/:id", userHandler.GetUser)
 	app.Post("/users/:id/verify-email", userHandler.VerifyEmail)
 	app.Post("/users/:id/complete-profile", userHandler.CompleteProfile)

@@ -1,49 +1,63 @@
 <template>
   <nav class="nav">
     <span class="nav-logo">Todoe</span>
+    <div class="nav-tabs">
+      <button
+        :class="{ active: view === 'onboarding' }"
+        @click="view = 'onboarding'"
+      >Onboarding</button>
+      <button
+        :class="{ active: view === 'activated' }"
+        @click="view = 'activated'"
+      >Activated users</button>
+    </div>
   </nav>
 
   <main class="page">
-    <div class="step-bar">
-      <div v-for="step in steps" :key="step.n" class="step-bar-item" :class="stepBarClass(step.n)">
-        <div class="step-dot" :class="stepDotClass(step.n)">
-          <svg v-if="stepDotClass(step.n) === 'completed'" width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span v-else>{{ step.n }}</span>
+    <template v-if="view === 'onboarding'">
+      <div class="step-bar">
+        <div v-for="step in steps" :key="step.n" class="step-bar-item" :class="stepBarClass(step.n)">
+          <div class="step-dot" :class="stepDotClass(step.n)">
+            <svg v-if="stepDotClass(step.n) === 'completed'" width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span v-else>{{ step.n }}</span>
+          </div>
+          <div class="step-label" :class="stepDotClass(step.n)">{{ step.label }}</div>
         </div>
-        <div class="step-label" :class="stepDotClass(step.n)">{{ step.label }}</div>
       </div>
-    </div>
 
-    <StepRegister v-if="!user" @done="user = $event" />
+      <StepRegister v-if="!user" @done="user = $event" />
 
-    <StepCaptcha v-else-if="user.status === 'registered' && !captchaPassed" @done="captchaPassed = true" />
+      <StepCaptcha v-else-if="user.status === 'registered' && !captchaPassed" @done="captchaPassed = true" />
 
-    <StepVerifyEmail v-else-if="user.status === 'registered'" :user="user" @done="user = $event" />
+      <StepVerifyEmail v-else-if="user.status === 'registered'" :user="user" @done="user = $event" />
 
-    <StepCreditCheck v-else-if="user.status === 'email_verified'" :user="user" @done="user = $event" />
+      <StepCreditCheck v-else-if="user.status === 'email_verified'" :user="user" @done="user = $event" />
 
-    <template v-else-if="user.status === 'credit_denied'">
-      <div class="step-card">
-        <div class="card-title">Application declined</div>
-        <div class="card-desc">Unfortunately we can't proceed with your application.</div>
-        <div class="credit-result denied">
-          Credit denied — score <span class="credit-score">{{ user.credit_score }}</span>
+      <template v-else-if="user.status === 'credit_denied'">
+        <div class="step-card">
+          <div class="card-title">Application declined</div>
+          <div class="card-desc">Unfortunately we can't proceed with your application.</div>
+          <div class="credit-result denied">
+            Credit denied — score <span class="credit-score">{{ user.credit_score }}</span>
+          </div>
+          <p style="font-size: 0.875rem; color: var(--text-muted);">
+            Profile completion requires an approved credit check.
+          </p>
         </div>
-        <p style="font-size: 0.875rem; color: var(--text-muted);">
-          Profile completion requires an approved credit check.
-        </p>
-      </div>
+      </template>
+
+      <StepCompleteProfile
+        v-else-if="user.status === 'credit_approved'"
+        :user="user"
+        @done="user = $event"
+      />
+
+      <StepDone v-else-if="user.status === 'onboarding_complete'" :user="user" />
     </template>
 
-    <StepCompleteProfile
-      v-else-if="user.status === 'credit_approved'"
-      :user="user"
-      @done="user = $event"
-    />
-
-    <StepDone v-else-if="user.status === 'onboarding_complete'" :user="user" />
+    <ActivatedUsersList v-else />
   </main>
 </template>
 
@@ -55,8 +69,12 @@ import StepVerifyEmail from './components/StepVerifyEmail.vue'
 import StepCreditCheck from './components/StepCreditCheck.vue'
 import StepCompleteProfile from './components/StepCompleteProfile.vue'
 import StepDone from './components/StepDone.vue'
+import ActivatedUsersList from './components/ActivatedUsersList.vue'
 import type { User, UserStatus } from './types.ts'
 
+type View = 'onboarding' | 'activated'
+
+const view = ref<View>('onboarding')
 const user = ref<User | null>(null)
 const captchaPassed = ref(false)
 
