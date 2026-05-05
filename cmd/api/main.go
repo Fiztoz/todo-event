@@ -18,7 +18,7 @@ import (
 	taskhttp "todoe/domain/task/adapter/http"
 	taskapplication "todoe/domain/task/application"
 	taskdomain "todoe/domain/task/domain"
-	"todoe/pkg/event"
+	"todoe/internal/event"
 )
 
 func main() {
