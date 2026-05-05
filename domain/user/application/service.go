@@ -19,6 +19,7 @@ var (
 	ErrInvalidToken     = errors.New("invalid verification token")
 	ErrCreditNotChecked = errors.New("credit score not yet checked")
 	ErrCreditDenied     = errors.New("credit application was denied")
+	ErrEmailTaken       = errors.New("email is already in use by another user")
 )
 
 type Service struct {
@@ -94,6 +95,29 @@ func (s *Service) GetUser(ctx context.Context, id string) mo.Result[domain.User]
 
 func (s *Service) ListActivatedUsers(ctx context.Context) mo.Result[[]domain.User] {
 	return s.repo.FindActivated(ctx)
+}
+
+func (s *Service) UpdateContact(ctx context.Context, id, name, email string) mo.Result[domain.User] {
+	if name == "" {
+		return mo.Err[domain.User](ErrInvalidName)
+	}
+	if email == "" {
+		return mo.Err[domain.User](ErrInvalidEmail)
+	}
+	current := s.repo.FindByID(ctx, id)
+	if current.IsError() {
+		return mo.Err[domain.User](current.Error())
+	}
+	if found := s.repo.FindByEmail(ctx, email); !found.IsError() && found.MustGet().ID != id {
+		return mo.Err[domain.User](ErrEmailTaken)
+	}
+	next := current.MustGet().WithContact(name, email)
+	payload := domain.ContactUpdatedPayload{UserID: id, Name: name, Email: email}
+	if r := s.repo.Append(ctx, id, domain.EventContactUpdated, payload); r.IsError() {
+		return mo.Err[domain.User](r.Error())
+	}
+	s.publisher.Publish(ctx, event.Event{Type: domain.EventContactUpdated, Payload: next})
+	return mo.Ok(next)
 }
 
 func (s *Service) CompleteProfile(ctx context.Context, id, bio string) mo.Result[domain.User] {

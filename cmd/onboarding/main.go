@@ -70,6 +70,7 @@ func main() {
 	userBus.Subscribe(userdomain.EventEmailVerified, userProjection)
 	userBus.Subscribe(userdomain.EventCreditScored, userProjection)
 	userBus.Subscribe(userdomain.EventProfileCompleted, userProjection)
+	userBus.Subscribe(userdomain.EventContactUpdated, userProjection)
 
 	userPublisher := &multiPublisher{publishers: []event.Publisher{
 		userBus,
@@ -101,6 +102,7 @@ func main() {
 	app.Post("/users/register", userHandler.Register)
 	app.Get("/users/activated", userHandler.ListActivated)
 	app.Get("/users/:id", userHandler.GetUser)
+	app.Patch("/users/:id", userHandler.UpdateContact)
 	app.Post("/users/:id/verify-email", userHandler.VerifyEmail)
 	app.Post("/users/:id/complete-profile", userHandler.CompleteProfile)
 

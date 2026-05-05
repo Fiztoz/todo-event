@@ -76,6 +76,7 @@ VALUES
   (:id, :name, :email, :bio, :status, :verification_token, :credit_score, :credit_approved, :created_at)
 ON DUPLICATE KEY UPDATE
   name=VALUES(name),
+  email=VALUES(email),
   bio=VALUES(bio),
   status=VALUES(status),
   verification_token=VALUES(verification_token),
@@ -93,6 +94,21 @@ func (r *MySQLRepository) FindByID(ctx context.Context, id string) mo.Result[dom
 SELECT id, name, email, bio, status, verification_token, credit_score, credit_approved, created_at
 FROM users_view
 WHERE id = ?`, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return mo.Err[domain.User](err)
+	}
+	if err != nil {
+		return mo.Err[domain.User](err)
+	}
+	return mo.Ok(u)
+}
+
+func (r *MySQLRepository) FindByEmail(ctx context.Context, email string) mo.Result[domain.User] {
+	var u domain.User
+	err := r.db.GetContext(ctx, &u, `
+SELECT id, name, email, bio, status, verification_token, credit_score, credit_approved, created_at
+FROM users_view
+WHERE email = ?`, email)
 	if errors.Is(err, sql.ErrNoRows) {
 		return mo.Err[domain.User](err)
 	}

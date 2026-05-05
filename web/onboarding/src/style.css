@@ -326,6 +326,51 @@ body {
 .btn-secondary:hover:not(:disabled) { background: var(--bg); }
 .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.user-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.user-edit input {
+  height: 38px;
+  padding: 0 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.9rem;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.user-edit input:focus { border-color: var(--blue); }
+
+.user-actions {
+  display: flex;
+  gap: 8px;
+}
+.user-actions .btn-primary,
+.user-actions .btn-secondary {
+  flex: 1;
+  height: 36px;
+  margin-top: 0;
+}
+
+.btn-link {
+  align-self: flex-start;
+  margin-top: 10px;
+  padding: 4px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--blue);
+  font-size: 0.82rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-link:hover { background: #E8F0FF; }
+
 /* ── Done screen ─────────────────────────────────── */
 .done-card {
   text-align: center;

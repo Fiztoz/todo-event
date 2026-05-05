@@ -18,6 +18,7 @@ const (
 	EventCreditScored     = "user.credit_scored"
 	EventProfileCompleted = "user.profile_completed"
 	EventUserActivated    = "user.activated"
+	EventContactUpdated   = "user.contact_updated"
 )
 
 type User struct {
@@ -59,6 +60,12 @@ type UserActivatedPayload struct {
 	Name   string `json:"name"`
 }
 
+type ContactUpdatedPayload struct {
+	UserID string `json:"user_id"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+}
+
 func (u User) WithEmailVerified() User {
 	u.Status = StatusEmailVerified
 	return u
@@ -78,5 +85,11 @@ func (u User) WithCreditScore(score int, approved bool) User {
 func (u User) WithProfile(bio string) User {
 	u.Bio = bio
 	u.Status = StatusOnboardingComplete
+	return u
+}
+
+func (u User) WithContact(name, email string) User {
+	u.Name = name
+	u.Email = email
 	return u
 }

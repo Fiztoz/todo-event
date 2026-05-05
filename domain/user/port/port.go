@@ -16,11 +16,13 @@ type UseCase interface {
 	CompleteProfile(ctx context.Context, id, bio string) mo.Result[domain.User]
 	GetUser(ctx context.Context, id string) mo.Result[domain.User]
 	ListActivatedUsers(ctx context.Context) mo.Result[[]domain.User]
+	UpdateContact(ctx context.Context, id, name, email string) mo.Result[domain.User]
 }
 
 type Repository interface {
 	Append(ctx context.Context, aggregateID, eventType string, payload any) mo.Result[struct{}]
 	FindByID(ctx context.Context, id string) mo.Result[domain.User]
+	FindByEmail(ctx context.Context, email string) mo.Result[domain.User]
 	FindActivated(ctx context.Context) mo.Result[[]domain.User]
 }
 

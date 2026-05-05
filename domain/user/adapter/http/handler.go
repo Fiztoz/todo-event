@@ -76,6 +76,32 @@ func (h *Handler) ListActivated(c *fiber.Ctx) error {
 	return c.JSON(result.MustGet())
 }
 
+func (h *Handler) UpdateContact(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing id"})
+	}
+	var body struct {
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+	result := h.useCase.UpdateContact(c.Context(), id, body.Name, body.Email)
+	if result.IsError() {
+		switch {
+		case errors.Is(result.Error(), application.ErrInvalidName),
+			errors.Is(result.Error(), application.ErrInvalidEmail):
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": result.Error().Error()})
+		case errors.Is(result.Error(), application.ErrEmailTaken):
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": result.Error().Error()})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal error"})
+	}
+	return c.JSON(result.MustGet())
+}
+
 func (h *Handler) CompleteProfile(c *fiber.Ctx) error {
 	id := c.Params("id")
 	if id == "" {
