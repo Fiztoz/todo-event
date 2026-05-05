@@ -6,7 +6,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-const EventCreated = "task.created"
+const (
+	EventCreated       = "task.created"
+	EventStatusChanged = "task.status_changed"
+)
 
 type Status string
 
@@ -15,6 +18,14 @@ const (
 	StatusInProgress Status = "in_progress"
 	StatusDone       Status = "done"
 )
+
+func (s Status) IsValid() bool {
+	switch s {
+	case StatusPending, StatusInProgress, StatusDone:
+		return true
+	}
+	return false
+}
 
 type Task struct {
 	ID        bson.ObjectID `bson:"_id" json:"id"`
@@ -25,4 +36,9 @@ type Task struct {
 
 type CreatedPayload struct {
 	Task Task
+}
+
+type StatusChangedPayload struct {
+	TaskID bson.ObjectID
+	Status Status
 }

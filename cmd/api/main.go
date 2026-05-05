@@ -40,6 +40,7 @@ func main() {
 	bus := event.NewBus()
 	taskRepo := taskadapter.NewMongoRepository(clientIO)
 	bus.Subscribe(taskdomain.EventCreated, taskadapter.NewSaveHandler(taskRepo))
+	bus.Subscribe(taskdomain.EventStatusChanged, taskadapter.NewUpdateStatusHandler(taskRepo))
 	taskService := taskapplication.NewService(taskRepo, bus)
 	taskHandler := taskhttp.NewHandler(taskService)
 
@@ -47,6 +48,8 @@ func main() {
 	app.Get("/health", healthHandler.CheckHealth)
 	app.Post("/tasks", taskHandler.Create)
 	app.Get("/tasks", taskHandler.List)
+	app.Get("/tasks/:id", taskHandler.Detail)
+	app.Patch("/tasks/:id/status", taskHandler.ChangeStatus)
 
 	log.Fatal(app.Listen(":3000"))
 }

@@ -12,7 +12,10 @@ import (
 	"todoe/domain/task/port"
 )
 
-var ErrInvalidTitle = errors.New("title must not be empty")
+var (
+	ErrInvalidTitle  = errors.New("title must not be empty")
+	ErrInvalidStatus = errors.New("status must be one of: pending, in_progress, done")
+)
 
 type Service struct {
 	repo      port.Repository
@@ -48,4 +51,22 @@ func (s *Service) CreateTask(ctx context.Context, title string) mo.Result[domain
 
 func (s *Service) ListTasks(ctx context.Context) mo.Result[[]domain.Task] {
 	return s.repo.FindAll(ctx)
+}
+
+func (s *Service) GetTask(ctx context.Context, id bson.ObjectID) mo.Result[domain.Task] {
+	return s.repo.FindByID(ctx, id)
+}
+
+func (s *Service) ChangeStatus(ctx context.Context, id bson.ObjectID, status domain.Status) mo.Result[domain.Task] {
+	if !status.IsValid() {
+		return mo.Err[domain.Task](ErrInvalidStatus)
+	}
+	current := s.repo.FindByID(ctx, id)
+	if current.IsError() {
+		return mo.Err[domain.Task](current.Error())
+	}
+	next := current.MustGet()
+	next.Status = status
+	s.publisher.Publish(domain.EventStatusChanged, domain.StatusChangedPayload{TaskID: id, Status: status})
+	return mo.Ok(next)
 }
