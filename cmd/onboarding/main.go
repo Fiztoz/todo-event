@@ -55,6 +55,7 @@ func main() {
 		{Exchange: messaging.UserExchange, Queue: messaging.QueueCreditUserEvents},
 		{Exchange: messaging.UserExchange, Queue: messaging.QueueAuthenUserEvents},
 		{Exchange: messaging.CreditResultExchange, Queue: messaging.QueueOnboardingCreditResults},
+		{Exchange: messaging.TaskExchange, Queue: messaging.QueueAuditTaskEvents},
 	}); err != nil {
 		log.Fatal("rabbit topology:", err)
 	}
@@ -75,6 +76,7 @@ func main() {
 	userPublisher := &multiPublisher{publishers: []event.Publisher{
 		userBus,
 		messaging.NewPublisher(ch, messaging.UserExchange),
+		messaging.NewPublisher(ch, messaging.TaskExchange),
 	}}
 
 	userService := userapplication.NewService(userRepo, userPublisher)

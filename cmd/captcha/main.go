@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"log/slog"
 	"os"
@@ -15,7 +16,16 @@ import (
 	captchaapp "todoe/internal/captcha/application"
 	captchadomain "todoe/internal/captcha/domain"
 	"todoe/internal/event"
+	"todoe/internal/messaging"
 )
+
+type multiPublisher struct{ publishers []event.Publisher }
+
+func (m *multiPublisher) Publish(ctx context.Context, e event.Event) {
+	for _, p := range m.publishers {
+		p.Publish(ctx, e)
+	}
+}
 
 func main() {
 	mongoURI := os.Getenv("MONGO_URI")
@@ -31,13 +41,34 @@ func main() {
 		return mongo.Connect(options.Client().ApplyURI(mongoURI))
 	})
 
+	amqpURL := os.Getenv("AMQP_URL")
+	if amqpURL == "" {
+		amqpURL = "amqp://guest:guest@localhost:5672/"
+	}
+	
+	conn, ch, err := messaging.Connect(amqpURL)
+	if err != nil {
+		log.Fatal("rabbit:", err)
+	}
+	defer conn.Close()
+
+	if err := messaging.DeclareTopology(ch, []messaging.Binding{
+		{Exchange: messaging.TaskExchange, Queue: messaging.QueueAuditTaskEvents},
+	}); err != nil {
+		log.Fatal("rabbit topology:", err)
+	}
+
 	bus := event.NewEventBus()
 	repo := captchaadapter.NewMongoRepository(clientIO)
 	projection := captchaadapter.NewProjectionHandler(repo)
 	bus.Subscribe(captchadomain.EventIssued, projection)
 	bus.Subscribe(captchadomain.EventVerified, projection)
-
-	service := captchaapp.NewService(repo, bus)
+	publisher := &multiPublisher{publishers: []event.Publisher{
+		bus,
+		messaging.NewPublisher(ch, messaging.TaskExchange),
+	}}
+	
+	service := captchaapp.NewService(repo, publisher)
 	handler := captchahttp.NewHandler(service)
 
 	app := fiber.New()
