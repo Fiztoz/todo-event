@@ -9,7 +9,6 @@ import (
 
 	"todoe/domain/task/domain"
 	"todoe/domain/task/port"
-	"todoe/internal/event"
 )
 
 var (
@@ -18,14 +17,13 @@ var (
 )
 
 type Service struct {
-	repo      port.Repository
-	publisher port.Publisher
+	repo port.Repository
 }
 
 var _ port.UseCase = (*Service)(nil)
 
-func NewService(repo port.Repository, publisher port.Publisher) *Service {
-	return &Service{repo: repo, publisher: publisher}
+func NewService(repo port.Repository) *Service {
+	return &Service{repo: repo}
 }
 
 func validateTitle(title string) error {
@@ -51,7 +49,6 @@ func (s *Service) CreateTask(ctx context.Context, title string) mo.Result[domain
 	if result := s.repo.Save(ctx, task); result.IsError() {
 		return mo.Err[domain.Task](result.Error())
 	}
-	s.publisher.Publish(ctx, event.Event{Type: domain.EventCreated, Payload: task})
 	return mo.Ok(task)
 }
 
@@ -71,6 +68,5 @@ func (s *Service) ChangeStatus(ctx context.Context, task domain.Task, status dom
 	if result := s.repo.Save(ctx, next); result.IsError() {
 		return mo.Err[domain.Task](result.Error())
 	}
-	s.publisher.Publish(ctx, event.Event{Type: domain.EventStatusChanged, Payload: next})
 	return mo.Ok(next)
 }
