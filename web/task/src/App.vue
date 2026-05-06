@@ -1,6 +1,13 @@
 <template>
   <nav class="nav">
     <span class="nav-logo">Tasks</span>
+    <button
+      class="theme-toggle"
+      @click="cycleTheme"
+      :aria-label="`Current theme: ${theme}. Click to change.`"
+    >
+      {{ themeLabel }}
+    </button>
   </nav>
 
   <main class="page">
@@ -65,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { listTasks, createTask, changeStatus } from './api.ts'
 import type { Task, TaskStatus } from './types.ts'
 
@@ -81,7 +88,18 @@ const expandedId = ref<string | null>(null)
 const updatingId = ref<string | null>(null)
 const updateError = ref<string | null>(null)
 
+type Theme = 'light' | 'dark' | 'high-contrast'
+const theme = ref<Theme>('dark')
+
 const statuses: TaskStatus[] = ['pending', 'in_progress', 'done']
+
+const themeLabels: Record<Theme, string> = {
+  light: 'Light',
+  dark: 'Dark',
+  'high-contrast': 'HC'
+}
+
+const themeLabel = computed(() => themeLabels[theme.value])
 
 async function load() {
   loading.value = true
@@ -139,5 +157,30 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleString()
 }
 
-onMounted(load)
+function cycleTheme() {
+  const themes: Theme[] = ['light', 'dark', 'high-contrast']
+  const currentIndex = themes.indexOf(theme.value)
+  const nextTheme = themes[(currentIndex + 1) % themes.length]
+  theme.value = nextTheme
+  applyTheme(nextTheme)
+}
+
+function applyTheme(t: Theme) {
+  document.body.classList.remove('light', 'high-contrast')
+  localStorage.setItem('theme', t)
+  if (t === 'light') {
+    document.body.classList.add('light')
+  } else if (t === 'high-contrast') {
+    document.body.classList.add('high-contrast')
+  }
+}
+
+onMounted(() => {
+  const saved = localStorage.getItem('theme') as Theme | null
+  if (saved && ['light', 'dark', 'high-contrast'].includes(saved)) {
+    theme.value = saved
+    applyTheme(saved)
+  }
+  load()
+})
 </script>
