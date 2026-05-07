@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/samber/mo"
@@ -77,6 +78,8 @@ func (s *Service) ChangeStatus(ctx context.Context, id bson.ObjectID, status dom
 	if result := s.repo.Append(ctx, id, domain.EventStatusChanged, domain.StatusChangedPayload{Status: status}); result.IsError() {
 		return mo.Err[domain.Task](result.Error())
 	}
+	fmt.Printf("payload: %v\n", next)
+	// fmt.Printf("result: %v\n", result)
 	s.publisher.Publish(ctx, event.Event{Type: domain.EventStatusChanged, Payload: next})
 	return mo.Ok(next)
 }

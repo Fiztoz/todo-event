@@ -33,7 +33,7 @@ func (r *MongoRepository) getClient() mo.Either[error, *mongo.Client] {
 	return r.cached
 }
 
-func (r *MongoRepository) collection() (*mongo.Collection, error) {
+func (r *MongoRepository) taskEventsCollection() (*mongo.Collection, error) {
 	either := r.getClient()
 	if either.IsLeft() {
 		return nil, either.MustLeft()
@@ -41,8 +41,24 @@ func (r *MongoRepository) collection() (*mongo.Collection, error) {
 	return either.MustRight().Database("todoe").Collection("task_events"), nil
 }
 
+func (r *MongoRepository) tasksCollection() (*mongo.Collection, error) {
+	either := r.getClient()
+	if either.IsLeft() {
+		return nil, either.MustLeft()
+	}
+	return either.MustRight().Database("todoe").Collection("tasks"), nil
+}
+
+func (r *MongoRepository) db() (*mongo.Database, error) {
+	either := r.getClient()
+	if either.IsLeft() {
+		return nil, either.MustLeft()
+	}
+	return either.MustRight().Database("todoe"), nil
+}
+
 func (r *MongoRepository) Append(ctx context.Context, aggregateID bson.ObjectID, eventType string, payload any) mo.Result[struct{}] {
-	col, err := r.collection()
+	col, err := r.taskEventsCollection()
 	if err != nil {
 		return mo.Err[struct{}](err)
 	}
@@ -64,31 +80,19 @@ func (r *MongoRepository) Append(ctx context.Context, aggregateID bson.ObjectID,
 }
 
 func (r *MongoRepository) FindByID(ctx context.Context, id bson.ObjectID) mo.Result[domain.Task] {
-	col, err := r.collection()
+	col, err := r.tasksCollection()
 	if err != nil {
 		return mo.Err[domain.Task](err)
 	}
-	cursor, err := col.Find(ctx,
-		bson.D{{Key: "aggregate_id", Value: id}},
-		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}),
-	)
-	if err != nil {
-		return mo.Err[domain.Task](err)
-	}
-	defer cursor.Close(ctx)
-	var events []domain.StoredEvent
-	if err := cursor.All(ctx, &events); err != nil {
-		return mo.Err[domain.Task](err)
-	}
-	task, err := domain.Apply(id, events)
-	if err != nil {
+	var task domain.Task
+	if err := col.FindOne(ctx, bson.D{{Key: "_id", Value: id}}).Decode(&task); err != nil {
 		return mo.Err[domain.Task](err)
 	}
 	return mo.Ok(task)
 }
 
 func (r *MongoRepository) FindAll(ctx context.Context) mo.Result[[]domain.Task] {
-	col, err := r.collection()
+	col, err := r.taskEventsCollection()
 	if err != nil {
 		return mo.Err[[]domain.Task](err)
 	}
@@ -121,4 +125,29 @@ func (r *MongoRepository) FindAll(ctx context.Context) mo.Result[[]domain.Task] 
 		tasks = append(tasks, task)
 	}
 	return mo.Ok(tasks)
+}
+
+func (r *MongoRepository) Upsert(ctx context.Context, task domain.Task) mo.Result[struct{}] {
+	col, err := r.tasksCollection()
+	if err != nil {
+		return mo.Err[struct{}](err)
+	}
+
+	filter := bson.D{{Key: "_id", Value: task.ID}}
+	update := bson.D{
+		{Key: "$set", Value: bson.D{
+			{Key: "title", Value: task.Title},
+			{Key: "status", Value: task.Status},
+			{Key: "updated_at", Value: time.Now()},
+		}},
+		{Key: "$setOnInsert", Value: bson.D{
+			{Key: "created_at", Value: task.CreatedAt},
+		}},
+	}
+	opts := options.UpdateOne().SetUpsert(true)
+
+	if _, err := col.UpdateOne(ctx, filter, update, opts); err != nil {
+		return mo.Err[struct{}](err)
+	}
+	return mo.Ok(struct{}{})
 }

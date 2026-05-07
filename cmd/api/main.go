@@ -46,6 +46,11 @@ func main() {
 	bus.Subscribe(taskdomain.EventStatusChanged, auditHandler)
 
 	taskRepo := taskadapter.NewMongoRepository(clientIO)
+	
+	readerHandler := taskadapter.NewReaderHandler(taskRepo)
+	bus.Subscribe(taskdomain.EventCreated, readerHandler)
+	bus.Subscribe(taskdomain.EventStatusChanged, readerHandler)
+
 	taskService := taskapplication.NewService(taskRepo, bus)
 	taskHandler := taskhttp.NewHandler(taskService)
 	// HTTP Server
