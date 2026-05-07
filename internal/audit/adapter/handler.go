@@ -22,7 +22,7 @@ func NewAuditHandler(repo *MongoRepository, fallbackPath string) func(context.Co
 	return func(ctx context.Context, e event.Event) error {
 		entry := domain.AuditEntry{
 			ID:        bson.NewObjectID(),
-			EventType: e.Type,
+			EventType: string(e.Type),
 			Payload:   e.Payload,
 			CreatedAt: time.Now(),
 		}

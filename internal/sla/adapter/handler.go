@@ -49,7 +49,7 @@ func NewSlaHandler(repo *MongoRepository, csvPath string) func(context.Context, 
 
 		entry := sladomain.SLAEntry{
 			ID:        task.OriginID.Hex(),
-			EventType: e.Type,
+			EventType: string(e.Type),
 			CreatedAt: pendingCreatedAt,
 			Duration:  duration,
 		}
