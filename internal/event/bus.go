@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+
+	"github.com/samber/lo"
 )
 
 // Event represents a domain event with a type and payload.
@@ -49,11 +51,11 @@ func (b *EventBus) Publish(ctx context.Context, e Event) {
 	handlers := b.handlerMap[DomainEvent(e.Type)]
 	b.mu.RUnlock()
 
-	for _, fn := range handlers {
+	lo.ForEach(handlers, func(fn HandlerFunc, _ int) {
 		if err := fn(ctx, e); err != nil {
 			slog.Error("eventbus: handler error", "event_type", e.Type, "err", err)
 		}
-	}
+	})
 }
 
 var _ Publisher = (*EventBus)(nil)
