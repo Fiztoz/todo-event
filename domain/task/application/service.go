@@ -69,14 +69,13 @@ func (s *Service) ChangeStatus(ctx context.Context, id bson.ObjectID, status dom
 	if err := validateStatus(status); err != nil {
 		return mo.Err[domain.Task](err)
 	}
-	current := s.repo.FindByID(ctx, id)
-	if current.IsError() {
-		return mo.Err[domain.Task](current.Error())
-	}
-	next := current.MustGet().ChangeStatus(status)
-	if result := s.repo.Append(ctx, id, domain.EventStatusChanged, domain.StatusChangedPayload{Status: status}); result.IsError() {
-		return mo.Err[domain.Task](result.Error())
-	}
-	s.publisher.Publish(ctx, event.Event{Type: domain.EventStatusChanged, Payload: next})
-	return mo.Ok(next)
+
+	return s.repo.FindByID(ctx, id).FlatMap(func(task domain.Task) mo.Result[domain.Task] {
+		next := task.ChangeStatus(status)
+		if result := s.repo.Append(ctx, id, domain.EventStatusChanged, domain.StatusChangedPayload{Status: status}); result.IsError() {
+			return mo.Err[domain.Task](result.Error())
+		}
+		s.publisher.Publish(ctx, event.Event{Type: domain.EventStatusChanged, Payload: next})
+		return mo.Ok(next)
+	})
 }
