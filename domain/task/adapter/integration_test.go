@@ -39,7 +39,7 @@ func setupRepo(t *testing.T) *MongoRepository {
 	t.Cleanup(func() { _ = client.Disconnect(context.Background()) })
 
 	clientIO := mo.NewIOEither(func() (*mongo.Client, error) { return client, nil })
-	return NewMongoRepository(clientIO)
+	return NewMongoRepository(clientIO, t.TempDir()+"/task_fallback_test.jsonl")
 }
 
 // removeAfterTest deletes the task with id from the tasks collection at end of test,

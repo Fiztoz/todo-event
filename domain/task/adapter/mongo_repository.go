@@ -2,8 +2,10 @@ package adapter
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/samber/mo"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -12,15 +14,24 @@ import (
 	"todoe/domain/task/domain"
 )
 
+const (
+	maxRetries    = 3
+	retryInterval = 1 * time.Second
+)
+
 type MongoRepository struct {
 	clientIO    mo.IOEither[*mongo.Client]
 	once        sync.Once
 	cached      mo.Either[error, *mongo.Client]
 	initialized atomic.Bool
+	fileWriter  *FileWriter
 }
 
-func NewMongoRepository(clientIO mo.IOEither[*mongo.Client]) *MongoRepository {
-	return &MongoRepository{clientIO: clientIO}
+func NewMongoRepository(clientIO mo.IOEither[*mongo.Client], fallbackPath string) *MongoRepository {
+	return &MongoRepository{
+		clientIO:   clientIO,
+		fileWriter: NewFileWriter(fallbackPath),
+	}
 }
 
 func (r *MongoRepository) getClient() mo.Either[error, *mongo.Client] {
@@ -40,11 +51,32 @@ func (r *MongoRepository) collection() (*mongo.Collection, error) {
 }
 
 func (r *MongoRepository) Save(ctx context.Context, task domain.Task) mo.Result[struct{}] {
-	col, err := r.collection()
-	if err != nil {
-		return mo.Err[struct{}](err)
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		col, err := r.collection()
+		if err != nil {
+			lastErr = err
+		} else if _, err := col.InsertOne(ctx, task); err != nil {
+			lastErr = err
+		} else {
+			return mo.Ok(struct{}{})
+		}
+
+		slog.Warn("task: mongo save failed",
+			"attempt", attempt,
+			"max_retries", maxRetries,
+			"err", lastErr,
+		)
+		if attempt < maxRetries {
+			time.Sleep(retryInterval)
+		}
 	}
-	if _, err := col.InsertOne(ctx, task); err != nil {
+
+	slog.Error("task: all mongo retries exhausted, falling back to file",
+		"err", lastErr,
+	)
+	if err := r.fileWriter.Write(task); err != nil {
+		slog.Error("task: file fallback also failed", "err", err)
 		return mo.Err[struct{}](err)
 	}
 	return mo.Ok(struct{}{})

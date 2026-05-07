@@ -17,6 +17,11 @@ import (
 	taskadapter "todoe/domain/task/adapter"
 	taskhttp "todoe/domain/task/adapter/http"
 	taskapplication "todoe/domain/task/application"
+	taskdomain "todoe/domain/task/domain"
+
+	eventbus "todoe/internal/event"
+	auditadapter "todoe/internal/audit/adapter"
+	// slaadapter "todoe/internal/sla/adapter"
 )
 
 func main() {
@@ -34,9 +39,19 @@ func main() {
 
 	healthService := healthapp.NewService(healthRepo)
 	healthHandler := healthhttp.NewHandler(healthService)
+	eventBus := eventbus.NewEventBus()
+	auditRepo := auditadapter.NewMongoRepository(clientIO)
+	auditHandler := auditadapter.NewAuditHandler(auditRepo, "audit_fallback.jsonl")
 
-	taskRepo := taskadapter.NewMongoRepository(clientIO)
-	taskService := taskapplication.NewService(taskRepo)
+	// slaRepo := slaadapter.NewMongoRepository(clientIO)
+	// slaHandler := slaadapter.NewSlaHandler(slaRepo, "sla.csv")
+
+	eventBus.Subscribe(taskdomain.EventCreated, auditHandler)
+	eventBus.Subscribe(taskdomain.EventStatusChanged, auditHandler)
+	// eventBus.Subscribe(taskdomain.EventStatusChanged, slaHandler)
+
+	taskRepo := taskadapter.NewMongoRepository(clientIO, "task_fallback.jsonl")
+	taskService := taskapplication.NewService(taskRepo, eventBus)
 	taskHandler := taskhttp.NewHandler(taskService)
 
 	app := fiber.New()
