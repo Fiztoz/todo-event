@@ -15,7 +15,7 @@ import (
 	"todoe/internal/health/application"
 )
 
-func main() {
+func registerRoutes(app *fiber.App) {
 	mongoURI := os.Getenv("MONGO_URI")
 	if mongoURI == "" {
 		mongoURI = "mongodb://root:root@localhost:27017"
@@ -26,13 +26,17 @@ func main() {
 	})
 
 	healthRepo := healthadapter.NewMongoRepository(clientIO)
-	defer healthRepo.Disconnect(context.Background())
+	defer func() { healthRepo.Disconnect(context.Background()) }()
 
 	healthService := application.NewService(healthRepo)
 	healthHandler := healthhttp.NewHandler(healthService)
 
-	app := fiber.New()
 	app.Get("/health", healthHandler.CheckHealth)
+}
+
+func main() {
+	app := fiber.New()
+	registerRoutes(app)
 
 	log.Fatal(app.Listen(":3000"))
 }
