@@ -42,13 +42,13 @@ func main() {
 
 	auditRepo := auditadapter.NewMongoRepository(clientIO)
 	auditHandler := auditadapter.NewAuditHandler(auditRepo)
-	bus.Subscribe(taskdomain.EventCreated, auditHandler)
-	bus.Subscribe(taskdomain.EventStatusChanged, auditHandler)
+	bus.Subscribe(event.DomainEvent(taskdomain.EventCreated), auditHandler)
+	bus.Subscribe(event.DomainEvent(taskdomain.EventStatusChanged), auditHandler)
 
 	taskRepo := taskadapter.NewMongoRepository(clientIO)
 	projectionHandler := taskadapter.NewProjectionHandler(taskRepo)
-	bus.Subscribe(taskdomain.EventCreated, projectionHandler)
-	bus.Subscribe(taskdomain.EventStatusChanged, projectionHandler)
+	bus.Subscribe(event.DomainEvent(taskdomain.EventCreated), projectionHandler)
+	bus.Subscribe(event.DomainEvent(taskdomain.EventStatusChanged), projectionHandler)
 	taskService := taskapplication.NewService(taskRepo, bus)
 	taskHandler := taskhttp.NewHandler(taskService)
 	// HTTP Server
