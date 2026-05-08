@@ -75,6 +75,14 @@ func (s *Service) ActivateUser(ctx context.Context, userID, email, name string) 
 	return mo.Ok(cred)
 }
 
+func (s *Service) UpdateEmail(ctx context.Context, userID, email string) mo.Result[struct{}] {
+	if r := s.repo.UpdateEmailByUserID(ctx, userID, email); r.IsError() {
+		return mo.Err[struct{}](r.Error())
+	}
+	slog.Info("auth: credential email updated", "user_id", userID, "email", email)
+	return mo.Ok(struct{}{})
+}
+
 func (s *Service) Login(ctx context.Context, email, password string) mo.Result[domain.Session] {
 	cred := s.repo.FindCredentialByEmail(ctx, email)
 	if cred.IsError() {

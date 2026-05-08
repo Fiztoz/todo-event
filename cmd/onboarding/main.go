@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"hash/fnv"
 	"log"
 	"log/slog"
@@ -73,6 +74,12 @@ func main() {
 	}
 	defer conn.Close()
 
+	rpcCh, err := conn.Channel()
+	if err != nil {
+		log.Fatal("rabbit rpc channel:", err)
+	}
+	defer rpcCh.Close()
+
 	if err := messaging.DeclareTopology(ch, []messaging.Binding{
 		{Exchange: messaging.OnboardingExchange, Queue: messaging.QueueAuditUserEvents},
 		{Exchange: messaging.UserExchange, Queue: messaging.QueueAuthenUserEvents},
@@ -100,6 +107,27 @@ func main() {
 
 	userService := userapplication.NewService(userRepo, userPublisher, messaging.NewPublisher(ch, messaging.OnboardingExchange))
 	userHandler := userhttp.NewHandler(userService)
+
+	// RPC server: api service sends {id} and expects a userdomain.User reply
+	if err := messaging.RPCServer(rpcCh, messaging.QueueRPCUserLookup, func(body []byte) []byte {
+		slog.Info("onboarding: rpc user-lookup request received", "body", string(body))
+		var req struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			slog.Error("onboarding: rpc user-lookup unmarshal", "err", err)
+			return []byte(`{}`)
+		}
+		r := userService.GetUser(context.Background(), req.ID)
+		if r.IsError() {
+			slog.Error("onboarding: rpc user-lookup not found", "id", req.ID, "err", r.Error())
+			return []byte(`{}`)
+		}
+		out, _ := json.Marshal(r.MustGet())
+		return out
+	}); err != nil {
+		log.Fatal("rabbit rpc server:", err)
+	}
 
 	// Credit scoring runs in-process: on email_verified → score → RecordCreditScore
 	userBus.Subscribe(userdomain.EventEmailVerified, func(ctx context.Context, e event.Event) error {
@@ -169,6 +197,6 @@ func main() {
 	app.Post("/captcha", captchaHandler.Issue)
 	app.Post("/captcha/:id/verify", captchaHandler.Verify)
 
-	slog.Info("onboarding service listening", "port", "3003")
-	log.Fatal(app.Listen(":3003"))
+	slog.Info("onboarding service listening", "port", "3002")
+	log.Fatal(app.Listen(":3002"))
 }

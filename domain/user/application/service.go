@@ -123,6 +123,7 @@ func (s *Service) UpdateContact(ctx context.Context, id, name, email, bio string
 		return mo.Err[domain.User](r.Error())
 	}
 	s.publisher.Publish(ctx, event.Event{Type: domain.EventContactUpdated, Payload: next})
+	s.amqPublisher.Publish(ctx, event.Event{Type: domain.EventContactUpdated, Payload: next.ID})
 	return mo.Ok(next)
 }
 

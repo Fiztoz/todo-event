@@ -65,6 +65,12 @@ func main() {
 	}
 	defer conn.Close()
 
+	rpcCh, err := conn.Channel()
+	if err != nil {
+		log.Fatal("rabbit rpc channel:", err)
+	}
+	defer rpcCh.Close()
+
 	if err := messaging.DeclareTopology(ch, []messaging.Binding{
 		{Exchange: messaging.TaskExchange, Queue: messaging.QueueAuditTaskEvents},
 	}); err != nil {
@@ -108,6 +114,42 @@ func main() {
 		}
 	}); err != nil {
 		log.Fatal("rabbit subscribe authen.user.events:", err)
+	}
+
+	// Consume user lookup replies
+	if err := messaging.ConsumeQueue(rpcCh, messaging.QueueAPIUserLookupReply, func(body []byte) {
+		slog.Info("api: user.lookup_reply received", "body", string(body))
+		var user userdomain.User
+		if err := json.Unmarshal(body, &user); err != nil {
+			slog.Error("api: user.lookup_reply decode user failed", "err", err)
+			return
+		}
+		if r := authenService.UpdateEmail(context.Background(), user.ID, user.Email); r.IsError() {
+			slog.Error("api: user.lookup_reply email update failed", "err", r.Error())
+		}
+	}); err != nil {
+		log.Fatal("rabbit consume api.user.lookup.reply:", err)
+	}
+
+	// user.contact_updated arrives via RabbitMQ → publish request for user lookup
+	if err := messaging.Subscribe(ch, messaging.UserExchange, messaging.QueueAPIUserEvents, func(msg messaging.Message) {
+		if msg.Type != userdomain.EventContactUpdated {
+			return
+		}
+		var payload struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			slog.Error("api: user.contact_updated unmarshal", "err", err)
+			return
+		}
+		reqBody, _ := json.Marshal(payload)
+		slog.Info("api: publishing user lookup rpc request for user_id=%s", payload.ID)
+		if err := messaging.PublishRPCRequest(rpcCh, messaging.QueueRPCUserLookup, messaging.QueueAPIUserLookupReply, reqBody); err != nil {
+			slog.Error("api: user.contact_updated rpc request failed", "user_id", payload.ID, "err", err)
+		}
+	}); err != nil {
+		log.Fatal("rabbit subscribe api.user.events:", err)
 	}
 
 	// ── HTTP ─────────────────────────────────────────────────────────────

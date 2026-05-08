@@ -3,7 +3,10 @@ package messaging
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
@@ -28,9 +31,12 @@ func DeclareExchange(ch *amqp.Channel, name string) error {
 }
 
 const (
-	QueueAuditTaskEvents = "audit.task.events"
-	QueueAuthenUserEvents = "authen.user.events"
-	QueueAuditUserEvents  = "audit.user.events"
+	QueueAuditTaskEvents    = "audit.task.events"
+	QueueAuthenUserEvents   = "authen.user.events"
+	QueueAuditUserEvents    = "audit.user.events"
+	QueueAPIUserEvents      = "api.user.events"
+	QueueRPCUserLookup      = "rpc.user.lookup"
+	QueueAPIUserLookupReply = "api.user.lookup.reply"
 )
 
 type Binding struct {
@@ -106,3 +112,95 @@ func Subscribe(ch *amqp.Channel, exchange, queue string, handler func(Message)) 
 	}()
 	return nil
 }
+
+func ConsumeQueue(ch *amqp.Channel, queue string, handler func(body []byte)) error {
+	q, err := ch.QueueDeclare(queue, true, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+	deliveries, err := ch.Consume(q.Name, "", false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+	go func() {
+		for d := range deliveries {
+			handler(d.Body)
+			d.Ack(false)
+		}
+	}()
+	return nil
+}
+
+// RPCServer starts a goroutine that consumes requests from queue, calls handler
+// with the raw request body, and publishes the returned bytes to the ReplyTo queue.
+func RPCServer(ch *amqp.Channel, queue string, handler func(body []byte) []byte) error {
+	q, err := ch.QueueDeclare(queue, true, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+	deliveries, err := ch.Consume(q.Name, "", false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+	go func() {
+		for d := range deliveries {
+			response := handler(d.Body)
+			if err := ch.PublishWithContext(context.Background(), "", d.ReplyTo, false, false, amqp.Publishing{
+				ContentType:   "application/json",
+				CorrelationId: d.CorrelationId,
+				Body:          response,
+			}); err != nil {
+				slog.Error("rpc: reply publish failed", "queue", queue, "err", err)
+			}
+			d.Ack(false)
+		}
+	}()
+	return nil
+}
+
+// PublishRPCRequest sends a request to the given queue and sets the ReplyTo queue.
+func PublishRPCRequest(ch *amqp.Channel, queue string, replyTo string, body []byte) error {
+	return ch.PublishWithContext(context.Background(), "", queue, false, false, amqp.Publishing{
+		ContentType: "application/json",
+		ReplyTo:     replyTo,
+		Body:        body,
+	})
+}
+
+// RPCCall sends request body to queue and blocks until a correlated reply arrives
+// or the timeout elapses. A dedicated exclusive reply queue is created per call.
+func RPCCall(ch *amqp.Channel, queue string, body []byte, timeout time.Duration) ([]byte, error) {
+	replyQ, err := ch.QueueDeclare("", false, false, true, false, nil)
+	if err != nil {
+		return nil, err
+	}
+	msgs, err := ch.Consume(replyQ.Name, "", true, true, false, false, nil)
+	if err != nil {
+		return nil, err
+	}
+	corrID := fmt.Sprintf("%d", time.Now().UnixNano())
+	if err := ch.PublishWithContext(context.Background(), "", queue, false, false, amqp.Publishing{
+		ContentType:   "application/json",
+		CorrelationId: corrID,
+		ReplyTo:       replyQ.Name,
+		Body:          body,
+	}); err != nil {
+		return nil, err
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		select {
+		case msg, ok := <-msgs:
+			if !ok {
+				return nil, errors.New("rpc: reply channel closed")
+			}
+			if msg.CorrelationId == corrID {
+				return msg.Body, nil
+			}
+		case <-timer.C:
+			return nil, errors.New("rpc: timeout waiting for reply")
+		}
+	}
+}
+

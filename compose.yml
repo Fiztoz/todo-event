@@ -75,25 +75,25 @@ services:
     depends_on:
       - loki
 
-  onboarding:
-    build:
-      context: .
-      dockerfile: cmd/onboarding/Dockerfile
-    container_name: todoe-onboarding
-    restart: unless-stopped
-    ports:
-      - "3002:3002"
-    environment:
-      MYSQL_DSN: todoe:todoe@tcp(mysql:3306)/todoe_onboarding?parseTime=true&multiStatements=true
-      MONGO_URI: mongodb://root:root@mongo:27017
-      AMQP_URL: amqp://guest:guest@rabbitmq:5672/
-    depends_on:
-      mysql:
-        condition: service_healthy
-      mongo:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+  # onboarding:
+  #   build:
+  #     context: .
+  #     dockerfile: cmd/onboarding/Dockerfile
+  #   container_name: todoe-onboarding
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3002:3002"
+  #   environment:
+  #     MYSQL_DSN: todoe:todoe@tcp(mysql:3306)/todoe_onboarding?parseTime=true&multiStatements=true
+  #     MONGO_URI: mongodb://root:root@mongo:27017
+  #     AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #     mongo:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
 
   audit:
     build:

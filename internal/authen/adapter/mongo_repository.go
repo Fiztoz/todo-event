@@ -135,3 +135,16 @@ func (r *MongoRepository) DeactivateSession(ctx context.Context, token string) m
 	}
 	return mo.Ok(struct{}{})
 }
+
+func (r *MongoRepository) UpdateEmailByUserID(ctx context.Context, userID, email string) mo.Result[struct{}] {
+	db, err := r.db()
+	if err != nil {
+		return mo.Err[struct{}](err)
+	}
+	filter := bson.D{{Key: "user_id", Value: userID}}
+	update := bson.D{{Key: "$set", Value: bson.D{{Key: "email", Value: email}}}}
+	if _, err := db.Collection("auth_credentials").UpdateOne(ctx, filter, update); err != nil {
+		return mo.Err[struct{}](err)
+	}
+	return mo.Ok(struct{}{})
+}

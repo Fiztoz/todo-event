@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api/users': {
-        target: 'http://localhost:3003',
+        target: 'http://localhost:3002',
         rewrite: path => path.replace(/^\/api/, ''),
       },
       '/api': {
@@ -14,7 +14,7 @@ export default defineConfig({
         rewrite: path => path.replace(/^\/api/, ''),
       },
       '/captcha': {
-        target: 'http://localhost:3003',
+        target: 'http://localhost:3002',
       },
     },
   },
