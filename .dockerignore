@@ -1,0 +1,18 @@
+.git
+.github
+.idea
+.vscode
+
+# Compiled local binaries
+/captcha
+
+# Frontend build artefacts
+**/node_modules
+web/*/dist
+
+# Logs and OS noise
+*.log
+.DS_Store
+
+# Editor swap files
+*.swp

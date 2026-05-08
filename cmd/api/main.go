@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"log/slog"
 	"os"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/samber/mo"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
@@ -28,9 +26,6 @@ import (
 	taskapplication "todoe/domain/task/application"
 	taskdomain "todoe/domain/task/domain"
 
-	useradapter "todoe/domain/user/adapter"
-	userhttp "todoe/domain/user/adapter/http"
-	userapplication "todoe/domain/user/application"
 	userdomain "todoe/domain/user/domain"
 
 	"todoe/internal/event"
@@ -72,9 +67,6 @@ func main() {
 
 	if err := messaging.DeclareTopology(ch, []messaging.Binding{
 		{Exchange: messaging.TaskExchange, Queue: messaging.QueueAuditTaskEvents},
-		{Exchange: messaging.UserExchange, Queue: messaging.QueueWelcomeUserEvents},
-		{Exchange: messaging.UserExchange, Queue: messaging.QueueCreditUserEvents},
-		{Exchange: messaging.CreditResultExchange, Queue: messaging.QueueAPICreditResults},
 	}); err != nil {
 		log.Fatal("rabbit topology:", err)
 	}
@@ -92,21 +84,6 @@ func main() {
 	taskService := taskapplication.NewService(taskRepo, taskPublisher)
 	taskHandler := taskhttp.NewHandler(taskService)
 
-	// ── User domain ──────────────────────────────────────────────────────
-	userBus := event.NewEventBus()
-	userRepo := useradapter.NewMongoRepository(clientIO)
-	userProjection := useradapter.NewProjectionHandler(userRepo)
-	userBus.Subscribe(userdomain.EventRegistered, userProjection)
-	userBus.Subscribe(userdomain.EventEmailVerified, userProjection)
-	userBus.Subscribe(userdomain.EventCreditScored, userProjection)
-	userBus.Subscribe(userdomain.EventProfileCompleted, userProjection)
-	userPublisher := &multiPublisher{publishers: []event.Publisher{
-		userBus,
-		messaging.NewPublisher(ch, messaging.UserExchange),
-	}}
-	userService := userapplication.NewService(userRepo, userPublisher)
-	userHandler := userhttp.NewHandler(userService)
-
 	// ── Authen domain ────────────────────────────────────────────────────
 	authenBus := event.NewEventBus()
 	authenRepo := authenAdapter.NewMongoRepository(clientIO)
@@ -116,46 +93,21 @@ func main() {
 	authenService := authenapp.NewService(authenRepo, authenBus)
 	authenHandler := authenhttp.NewHandler(authenService)
 
-	//user.activated → create auth credential for the newly onboarded user
-	//subsribe domain events directly from internal bus since this is a same-process integration
-	userBus.Subscribe(userdomain.EventUserActivated, func(ctx context.Context, e event.Event) error {
-		p, ok := e.Payload.(userdomain.UserActivatedPayload)
-		if !ok {
-			slog.Error("api: user.activated unexpected payload", "type", fmt.Sprintf("%T", e.Payload))
-			return nil
+	// user.activated arrives from cmd/onboarding via RabbitMQ → create auth credential
+	if err := messaging.Subscribe(ch, messaging.UserExchange, messaging.QueueAuthenUserEvents, func(msg messaging.Message) {
+		if msg.Type != userdomain.EventUserActivated {
+			return
 		}
-		userID, err := bson.ObjectIDFromHex(p.UserID)
-		if err != nil {
-			slog.Error("api: user.activated invalid user id", "err", err)
-			return nil
+		var p userdomain.UserActivatedPayload
+		if err := json.Unmarshal(msg.Payload, &p); err != nil {
+			slog.Error("api: user.activated unmarshal", "err", err)
+			return
 		}
-		if r := authenService.ActivateUser(ctx, userID, p.Email, p.Name); r.IsError() {
+		if r := authenService.ActivateUser(context.Background(), p.UserID, p.Email, p.Name); r.IsError() {
 			slog.Error("api: user.activated credential creation failed", "err", r.Error())
 		}
-		return nil
-	})
-
-	// ── Credit result loop-back ──────────────────────────────────────────
-	// cmd/credit publishes credit.results → api calls RecordCreditScore
-	if err := messaging.Subscribe(ch, messaging.CreditResultExchange, messaging.QueueAPICreditResults, func(msg messaging.Message) {
-		if msg.Type != userdomain.EventCreditScored {
-			return
-		}
-		var p userdomain.CreditScoredPayload
-		if err := json.Unmarshal(msg.Payload, &p); err != nil {
-			slog.Error("api: credit scored unmarshal", "err", err)
-			return
-		}
-		id, err := bson.ObjectIDFromHex(p.UserID)
-		if err != nil {
-			slog.Error("api: invalid user id in credit result", "err", err)
-			return
-		}
-		if r := userService.RecordCreditScore(context.Background(), id, p.Score, p.Approved); r.IsError() {
-			slog.Error("api: record credit score", "err", r.Error())
-		}
 	}); err != nil {
-		log.Fatal("rabbit subscribe credit.results:", err)
+		log.Fatal("rabbit subscribe authen.user.events:", err)
 	}
 
 	// ── HTTP ─────────────────────────────────────────────────────────────
@@ -182,11 +134,6 @@ func main() {
 	tasks.Get("/", taskHandler.List)
 	tasks.Get("/:id", taskHandler.Detail)
 	tasks.Patch("/:id/status", taskHandler.ChangeStatus)
-
-	app.Post("/users/register", userHandler.Register)
-	app.Get("/users/:id", userHandler.GetUser)
-	app.Post("/users/:id/verify-email", userHandler.VerifyEmail)
-	app.Post("/users/:id/complete-profile", userHandler.CompleteProfile)
 
 	log.Fatal(app.Listen(":3000"))
 }

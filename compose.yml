@@ -11,6 +11,12 @@ services:
       MONGO_INITDB_DATABASE: todoe
     volumes:
       - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -26,6 +32,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  mysql:
+    image: mysql:8
+    container_name: todoe-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: todoe_onboarding
+      MYSQL_USER: todoe
+      MYSQL_PASSWORD: todoe
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   loki:
     image: grafana/loki:latest
@@ -50,7 +75,60 @@ services:
     depends_on:
       - loki
 
+  audit:
+    build:
+      context: .
+      dockerfile: cmd/audit/Dockerfile
+    container_name: todoe-audit
+    restart: unless-stopped
+    environment:
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+      LOKI_URL: http://loki:3100
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  credit:
+    build:
+      context: .
+      dockerfile: cmd/credit/Dockerfile
+    container_name: todoe-credit
+    restart: unless-stopped
+    environment:
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  welcome:
+    build:
+      context: .
+      dockerfile: cmd/welcome/Dockerfile
+    container_name: todoe-welcome
+    restart: unless-stopped
+    environment:
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  captcha:
+    build:
+      context: .
+      dockerfile: cmd/captcha/Dockerfile
+    container_name: todoe-captcha
+    restart: unless-stopped
+    ports:
+      - "3010:3010"
+    environment:
+      MONGO_URI: mongodb://root:root@mongo:27017
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      mongo:
+        condition: service_healthy
+
 volumes:
   mongo-data:
   grafana-data:
   rabbit-data:
+  mysql-data:

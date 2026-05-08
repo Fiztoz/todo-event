@@ -5,6 +5,7 @@ import "encoding/json"
 const (
 	TaskExchange         = "task.events"
 	UserExchange         = "user.events"
+	OnboardingExchange   = "onboarding.events"
 	CreditResultExchange = "credit.results"
 )
 

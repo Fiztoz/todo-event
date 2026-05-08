@@ -36,7 +36,7 @@ func main() {
 			var user userdomain.User
 			json.Unmarshal(msg.Payload, &user)
 			slog.Info("step 2/4: email confirmed — running credit check...",
-				"user_id", user.ID.Hex())
+				"user_id", user.ID)
 
 		case userdomain.EventCreditScored:
 			var user userdomain.User
@@ -54,6 +54,12 @@ func main() {
 			json.Unmarshal(msg.Payload, &user)
 			slog.Info("step 4/4: onboarding complete — welcome!",
 				"name", user.Name, "bio", user.Bio)
+
+		case userdomain.EventContactUpdated:
+			var user userdomain.User
+			json.Unmarshal(msg.Payload, &user)
+			slog.Info("contact updated",
+				"user_id", user.ID, "name", user.Name, "email", user.Email)
 		}
 	}); err != nil {
 		log.Fatal("rabbit subscribe:", err)
