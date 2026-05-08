@@ -7,59 +7,51 @@ Modular monolith with Ports & Adapters architecture, append-only persistence, an
 | Binary | Port | Role |
 |---|---|---|
 | `cmd/api` | `3000` | Auth (`/auth/*`), tasks (`/tasks/*`), health (`/health`). Consumes `user.activated` to create credentials. MongoDB. |
-| `cmd/onboarding` | `3002` | User registration & onboarding flow (`/users/*`). Publishes `user.events`; consumes `credit.results`. **MySQL** (per-service database). |
-| `cmd/captcha` | `3010` | Captcha challenge issue + verify (`/captcha/*`). |
-| `cmd/welcome` | — | Logs the four onboarding milestones from `user.events`. |
-| `cmd/credit` | — | Scores users on `user.email_verified` and publishes to `credit.results`. |
-| `cmd/audit` | — | Forwards `task.events` to Loki. |
+| `cmd/onboarding` | `3002` | User registration & onboarding flow (`/users/*`), captcha (`/captcha/*`). Credit scoring and welcome logging run in-process. **MySQL + MongoDB**. |
+| `cmd/audit` | — | Forwards `task.events` and `onboarding.events` to Loki. |
 
 ## Architecture
 
 ### Service topology
 
-HTTP from the browsers, fanout pub/sub over RabbitMQ between services, **per-service storage** (MongoDB for api/captcha, MySQL for onboarding), audit stream to Loki/Grafana.
+HTTP from the browsers, fanout pub/sub over RabbitMQ between services, **per-service storage** (MongoDB for api/onboarding, MySQL for onboarding), audit stream to Loki/Grafana. Credit scoring and welcome logging run in-process inside `cmd/onboarding`.
 
 ```
-   ┌──────────────────┐                          ┌──────────────────┐
-   │   Task UI        │                          │  Onboarding UI   │
-   │   web/vue        │                          │  web/onboarding  │
-   └────────┬─────────┘                          └─┬──────┬─────┬───┘
-            │                                      │      │     │
-            │ /auth/*                /api/users/*  │      │     │ /captcha/*
-            │ /tasks/*              /auth/login    │      │     │
-            ▼                                      ▼      │     ▼
-   ┌──────────────────┐         ┌──────────────────┐      │   ┌──────────────────┐
-   │  cmd/api :3000   │         │ cmd/onboarding   │      │   │  cmd/captcha     │
-   │  auth · tasks    │         │  :3002 users     │      │   │  :3010           │
-   │  health          │         │                  │      │   │                  │
-   │  [MongoDB]       │         │  [MySQL]         │      │   │  [MongoDB]       │
-   └────────┬─────────┘         └────────┬─────────┘      │   └────────┬─────────┘
-            │ AMQP                       │ AMQP           │            │ AMQP
-            ▼                            ▼                ▼            ▼
-   ╔═════════════════════════════════════════════════════════════════════════════╗
-   ║                              RabbitMQ                                        ║
-   ║                                                                              ║
-   ║  task.events    ─► audit.task.events           ─► cmd/audit                  ║
-   ║  user.events    ─► welcome.user.events         ─► cmd/welcome                ║
-   ║                 ─► credit.user.events          ─► cmd/credit                 ║
-   ║                 ─► authen.user.events          ─► cmd/api                    ║
-   ║  credit.results ─► onboarding.credit.results   ─► cmd/onboarding             ║
-   ╚═════════════════════════════════════════════════════════════════════════════╝
-            ▲                  ▲
-            │ pub user.events  │ pub credit.results
-            │                  │
-   ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-   │  cmd/welcome     │    │  cmd/credit      │    │  cmd/audit       │
-   │  logs 4 steps    │    │  scores users    │    │  → Loki :3100    │
-   │  [stateless]     │    │  [stateless]     │    │  [Loki]          │
-   └──────────────────┘    └──────────────────┘    └────────┬─────────┘
-                                                            ▼
-                                                   ┌──────────────────┐
-                                                   │  Grafana :3001   │
-                                                   └──────────────────┘
+   ┌──────────────────┐                ┌──────────────────────────────────┐
+   │   Task UI        │                │         Onboarding UI            │
+   │   web/vue        │                │         web/onboarding           │
+   └────────┬─────────┘                └─┬──────────────────────┬─────────┘
+            │                            │                      │
+            │ /auth/*     /api/users/*   │              /captcha/*
+            │ /tasks/*    /auth/login    │                      │
+            ▼                            ▼                      ▼
+   ┌──────────────────┐      ┌───────────────────────────────────────────┐
+   │  cmd/api :3000   │      │           cmd/onboarding :3002            │
+   │  auth · tasks    │      │  users · captcha · credit(in-proc)        │
+   │  health          │      │  welcome-logging(in-proc)                 │
+   │  [MongoDB]       │      │  [MySQL + MongoDB]                        │
+   └────────┬─────────┘      └───────────────┬───────────────────────────┘
+            │ AMQP                           │ AMQP
+            ▼                               ▼
+   ╔═════════════════════════════════════════════════════════════╗
+   ║                         RabbitMQ                            ║
+   ║                                                             ║
+   ║  task.events       ─► audit.task.events    ─► cmd/audit     ║
+   ║  onboarding.events ─► audit.user.events    ─► cmd/audit     ║
+   ║  user.events       ─► authen.user.events   ─► cmd/api       ║
+   ╚═════════════════════════════════════════════════════════════╝
+                                                      │
+                                             ┌────────▼─────────┐
+                                             │    cmd/audit     │
+                                             │    → Loki :3100  │
+                                             └────────┬─────────┘
+                                                      ▼
+                                             ┌──────────────────┐
+                                             │  Grafana :3001   │
+                                             └──────────────────┘
 
    Storage tier:
-     MongoDB :27017  db: todoe              ◄── cmd/api · cmd/captcha
+     MongoDB :27017  db: todoe              ◄── cmd/api · cmd/onboarding
        collections: auth_events, auth_credentials, auth_sessions,
                     tasks_events, tasks_view, captcha_events, captcha_challenges
      MySQL   :3306   db: todoe_onboarding   ◄── cmd/onboarding
@@ -68,39 +60,32 @@ HTTP from the browsers, fanout pub/sub over RabbitMQ between services, **per-ser
 
 ### Onboarding choreography
 
-The four-step user flow as it crosses processes. Every cross-service link goes through RabbitMQ, durable and replayable.
+The four-step user flow. Credit scoring and welcome logging are in-process within `cmd/onboarding`; only `user.activated` crosses the process boundary to `cmd/api`.
 
 ```
-  Browser     Onboarding     RabbitMQ        Welcome     Credit       API
-     │            │             │               │           │           │
-     │ POST /users/register     │               │           │           │
-     ├───────────►│             │               │           │           │
-     │            │  user.registered            │           │           │
-     │            ├────────────►│  ─────────────►│ step 1/4 │           │
-     │            │             │               │           │           │
-     │ POST /users/:id/verify-email              │           │           │
-     ├───────────►│             │               │           │           │
-     │            │  user.email_verified        │           │           │
-     │            ├────────────►│  ─────────────►│ step 2/4 │           │
-     │            │             │  ─────────────────────────►│           │
-     │            │             │               │  scores   │           │
-     │            │             │  ◄─────credit.results──────┤           │
-     │            │◄────────────┤               │           │           │
-     │            │  RecordCreditScore          │           │           │
-     │            │  user.credit_scored         │           │           │
-     │            ├────────────►│  ─────────────►│ step 3/4 │           │
-     │            │             │               │           │           │
-     │ POST /users/:id/complete-profile          │           │           │
-     ├───────────►│             │               │           │           │
-     │            │  user.profile_completed     │           │           │
-     │            ├────────────►│  ─────────────►│ step 4/4 │           │
-     │            │  user.activated             │           │           │
-     │            ├────────────►│  ──────────────────────────────────────►│
-     │            │             │               │           │ ActivateUser
-     │            │             │               │           │           │
-     │ POST /auth/login                         │           │           │
-     ├──────────────────────────────────────────────────────────────────►│
-     │◄───────────────────────── session token ─────────────────────────┤
+  Browser       Onboarding (in-process)               RabbitMQ        API
+     │         HTTP │  EventBus │ Credit │ Welcome        │              │
+     │              │           │        │                │              │
+     │ POST /users/register     │        │                │              │
+     ├─────────────►│           │        │                │              │
+     │              │─EventRegistered──►│ step 1/4       │              │
+     │              │           │        │                │              │
+     │ POST /users/:id/verify-email      │                │              │
+     ├─────────────►│           │        │                │              │
+     │              │─EventEmailVerified►│ step 2/4       │              │
+     │              │           │───────►│ scores(email)  │              │
+     │              │◄RecordCreditScore──┘                │              │
+     │              │─EventCreditScored──────────────────►│ step 3/4    │              │
+     │              │           │        │                │              │
+     │ POST /users/:id/complete-profile  │                │              │
+     ├─────────────►│           │        │                │              │
+     │              │─EventProfileCompleted──────────────►│ step 4/4    │
+     │              │─user.activated (AMQP)───────────────────────────►│
+     │              │           │        │                │    ActivateUser
+     │              │           │        │                │              │
+     │ POST /auth/login                                   │              │
+     ├───────────────────────────────────────────────────────────────►│
+     │◄───────────────────────────────────── session token ────────────┤
 ```
 
 ## Prerequisites
@@ -169,18 +154,15 @@ Exposed ports:
 - Loki: `3100`
 - Grafana: `3001` (container `3000`)
 
-## Run Services (6 terminals)
+## Run Services (3 terminals)
 
 ```bash
 go run ./cmd/api          # :3000  auth, tasks, health
-go run ./cmd/onboarding   # :3002  user registration & onboarding
-go run ./cmd/captcha      # :3010  captcha challenges
-go run ./cmd/welcome      #        logs onboarding milestones
-go run ./cmd/credit       #        scores users on email-verified
-go run ./cmd/audit        #        forwards task events to Loki
+go run ./cmd/onboarding   # :3002  users, captcha, credit scoring, welcome logging
+go run ./cmd/audit        #        forwards task + onboarding events to Loki
 ```
 
-Each binary connects to MongoDB and RabbitMQ on startup; HTTP services additionally listen on the port shown above.
+Each binary connects to RabbitMQ on startup; `cmd/api` and `cmd/onboarding` also use MongoDB, and `cmd/onboarding` additionally uses MySQL.
 
 ## Run Frontends (optional)
 
@@ -202,12 +184,12 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ## Walk the onboarding flow
 
-With all six services and the onboarding UI running, open [http://localhost:5173](http://localhost:5173) and step through:
+With all three services and the onboarding UI running, open [http://localhost:5173](http://localhost:5173) and step through:
 
 1. **Register** — fill in name + email.
 2. **Captcha** — solve the math challenge.
-3. **Verify email** — `cmd/welcome` prints the verification token in its log ("step 1/4 …"). Paste it into the UI.
-4. **Wait for credit** — `cmd/credit` scores the user; `cmd/welcome` logs "step 3/4".
+3. **Verify email** — `cmd/onboarding` prints the verification token in its log ("step 1/4 …"). Paste it into the UI.
+4. **Wait for credit** — credit scoring runs immediately in-process; the log shows "step 3/4" right after step 2.
 5. **Complete profile** — submit a bio. `cmd/api` consumes `user.activated` and prints a temp password to its log.
 6. **Login** — auth screen accepts the email + that temp password; you land in the task UI.
 

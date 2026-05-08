@@ -3,10 +3,9 @@ package messaging
 import "encoding/json"
 
 const (
-	TaskExchange         = "task.events"
-	UserExchange         = "user.events"
-	OnboardingExchange   = "onboarding.events"
-	CreditResultExchange = "credit.results"
+	TaskExchange       = "task.events"
+	UserExchange       = "user.events"
+	OnboardingExchange = "onboarding.events"
 )
 
 type Message struct {
